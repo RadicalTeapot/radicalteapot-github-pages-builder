@@ -7,7 +7,8 @@ Repository for my personal website, a clean and simple HTML / CSS website exampl
 Clone the repository then either
 
 - run `run.ps1 -servermode $true` to run a local version (accessible at localhost:1313)
-- run `run.ps1` to build the website
+- run `run.ps1` to build the website (use the `-publishfolder` parameter to specify the github pages folder, skipped if
+empty)
 
 ## To do
 
