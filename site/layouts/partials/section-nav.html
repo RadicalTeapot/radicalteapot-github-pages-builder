@@ -1,0 +1,11 @@
+{{ $current := . }}
+{{- with .Parent }}
+<hr>
+<nav>
+    {{- with $current.NextInSection }}<a href="{{ .RelPermalink }}">Previous</a>{{else}}<span>Previous</span>{{ end -}}
+    -
+    <a href="{{ .RelPermalink }}">Up</a>
+    -
+    {{- with $current.PrevInSection }}<a href="{{ .RelPermalink }}">Next</a>{{else}}<span>Next</span>{{ end -}}
+</nav>
+{{ end -}}

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{{ if .Title }}{{ .Title }} | {{ end }}{{ .Site.Title }}</title>
+        <meta name="description" content="{{ or .Description "Simple website build using Hugo and semantic HTML" }}">
+        <link href="/css/style.css" rel="stylesheet">
+        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🏠</text></svg>">
+    </head>
+    <body>
+        <nav id="main-nav">
+            <a href="/">Home</a>
+             // 
+            <a href="/about/">About</a>
+             // 
+            <a href="/notes/">Notes</a>
+             // 
+            <a href="/projects/">Projects</a>
+             // 
+            <a href="/whishlist/">Whishlist</a>
+        </nav>
+        <main>
+            <header>
+               {{ block "header" . }}{{ partial "header-title.html" . }}{{ end }}
+            </header>
+            <article>{{ block "main" . }}{{ .Content }}{{ end }}</article>
+            {{ partial "section-nav.html" . }}
+        </main>
+        <footer>{{ partial "footer.html" . }}</footer>
+    </body>
+</html>

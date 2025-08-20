@@ -1,0 +1,11 @@
+{{ define "header" }}
+        {{ partial "header-title.html" . }}
+        {{- with .Date }}
+            {{ $t := time.Format "2006-01-02" (time.AsTime .) }}
+            <time datetime="{{ $t }}">{{ $t }}</time>
+        {{end -}}
+{{ end }}
+
+{{ define "main" }}
+  {{ .Content }}
+{{ end }}

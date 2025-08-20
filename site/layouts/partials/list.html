@@ -1,0 +1,17 @@
+{{ $depth := or (.Scratch.Get "depth") 0 }}
+
+{{ $maxDepth := 3 }}
+{{ if isset .Site.Config "MaxListDepth" }}
+{{ $maxDepth := .Site.Config.MaxListDepth }}
+{{ end }}
+
+{{ .Content }}
+
+{{- with .Paginate .Pages (or .Pages.Len 1) }}
+<ul>
+{{ range .Pages.ByTitle }}
+    <li><a href="{{ .RelPermalink }}">{{ or .LinkTitle .RelPermalink }}</a></li>
+    {{ if and .IsSection (le $depth $maxDepth) }}{{.Scratch.Set "depth" (add $depth 1)}}{{ partial "list.html" . }}{{ end }}
+{{ end }}
+</ul>
+{{ end -}}

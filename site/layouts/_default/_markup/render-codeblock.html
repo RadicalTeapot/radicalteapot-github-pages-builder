@@ -1,0 +1,2 @@
+{{ $result := transform.HighlightCodeBlock . }}
+<pre><code data-lang={{ .Type }}>{{ $result.Inner }}</code></pre>
