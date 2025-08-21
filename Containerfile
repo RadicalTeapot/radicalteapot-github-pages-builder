@@ -14,6 +14,8 @@ CMD ["hugo", "server", "--bind=0.0.0.0", "--poll", "750ms"]
 
 FROM base as build
 
-ENV BASE_URL=example.com
+ENV BASE_URL="example.com"
+ENV OUTPUT="/site/public"
+ENV EXTRA_ARGS="--minify --cleanDestinationDir"
 
-CMD ["hugo", "--baseURL", "${BASE_URL}", "--minify", "--cleanDestinationDir", "--destination", "/site/public"]
+CMD hugo --baseURL $BASE_URL --destination $OUTPUT $EXTRA_ARGS

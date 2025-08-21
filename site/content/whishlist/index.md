@@ -1,5 +1,9 @@
 ---
-title: "Whishlist"
+pusblish: true
+resource: Lifestyle
+slug: whishlist
+title: Whishlist
+topic: "[[index|Lifestyle]]"
 ---
 
 # Wishlist
@@ -34,6 +38,7 @@ Ideally I should get all of these in one go as they compliment each other (excep
 
 ## Other
 
+- [Reusable notebook](https://www.amazon.com.be/Rocketbook-Core-Erasable-Notebook-Reusable/dp/B06ZXWVZ3X/ref=mp_s_a_1_1?crid=IAYYLBKL92YW&dib=eyJ2IjoiMSJ9._PsY_3MBk0OFpoe39RgetZDPZLR8t5oDjpFJ2ROleaLzxGe5KhmKz7UaIfnb1RGbJDFJYnM0Yn7B1TuDQky7TE3B-U1H3Vur-Dlakgh4ZrrpJC008b16aaW6I8E4s-11JNbvSU4l96FIIZK0n94Jnow3FrkJ7ZcST9cODmQyufbXaAkF0JalglGbY8xH94Qz92VTKe6cejZWw13tFA30Vw.uT2M7jQ9v-uHL36jqeG6DhjzmdZfVOHcrPCYgjwLegs&dib_tag=se&keywords=rocketbook+core&qid=1755751823&sprefix=rocketbook+core%2Caps%2C163&sr=8-1)
 - [New phone case](https://www.bol.com/be/fr/p/etui-rigide-en-siliconen-bmax-pour-oneplus-8-pro-housse-rigide-etui-de-protection-etui-pour-telephone-etui-rigide-protection-pour-telephone-blauw/9300000052353767/?bltgh=uI9q-R5V9-fcIR-adwNHeQ.2_39.40.ProductImage)
 - [Nice screwdriver](https://www.amazon.com/HOTO-Electric-Screwdriver-Cordless-Mechanical-dp-B0BLMQ8BXB/dp/B0BLMQ8BXB?tag=zd-buy-button-20&ascsubtag=e256e57b4f324a75881da0ac6f887dd6%7Cfee291aa-7110-410a-bd39-f600d5d41e5e%7Cmwb-oo) (only found it on US Amazon, I didn't look for it in Europe)
 - [Grimdark book](https://hollow-press.net/collections/plastiboo/products/godhusk-rebirth)
