@@ -1,0 +1,14 @@
+FROM alpine:latest
+
+RUN apk update \
+    && apk add --no-cache bash yq \
+    && rm -rf /var/cache/apk/*
+
+COPY ../scripts/frontmatter-parser.sh /root/frontmatter-parser.sh
+RUN chmod +x /root/frontmatter-parser.sh
+
+COPY test.md /root/test.md
+COPY test.sh /root/test.sh
+RUN chmod +x /root/test.sh
+
+WORKDIR /root

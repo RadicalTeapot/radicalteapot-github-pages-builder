@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+
+set -eEuo pipefail
+
+# Exit codes:
+# 1 - File not found
+# 2 - yq not available
+# 3 - YAML frontmatter not found / empty
+# 4 - Parameter(s) not found / invalid
+
+usage() {
+    cat << 'USAGE'
+Usage:
+frontmatter-parser.sh <file> [--parameter <name>]... [--help]
+
+Parameters:
+    <file>              Path to the file containing YAML frontmatter.
+    --parameter <name>  Specify a parameter to extract from the frontmatter.
+                        Can be specified multiple times.
+    --help              Show this help message and exit.
+
+Returns:
+    - If --parameter is specified: prints each parameter and its value in the format "<parameter> <value>".
+    - If no --parameter is specified: prints all parameter names in the frontmatter, one per line.
+
+Dependencies:
+    - yq                A command-line YAML processor (https://github.com/mikefarah/yq)
+
+Example:
+    frontmatter-parser.sh example.md --parameter title --parameter author
+    frontmatter-parser.sh example.md
+USAGE
+}
+
+err() {
+    local error_code
+    local error_line
+    error_code="${1:-}"
+    error_line="${2:-}"
+    if [[ -n "$error_code" && -n "$error_line" ]]; then
+        echo "Error: Script exited with code $error_code at line $error_line." >&2
+    elif [[ -n "$error_code" ]]; then
+        echo "Error: Script exited with code $error_code." >&2
+    else
+        echo "Error: An unknown error occurred." >&2
+    fi
+    exit "${error_code:-1}"
+}
+
+trap 'err $? $LINENO' ERR
+
+# -- prerequisites check --
+
+if [[ $# -lt 1 ]]; then
+    usage
+    exit 0
+fi
+
+if ! command -v yq &> /dev/null; then
+    echo "Error: Could not find yq in PATH." >&2
+    exit 2
+fi
+
+# Function to get the installed yq version
+# Returns the full version by default, or just the major version if the first argument is "true"
+get_yq_version() {
+    # Works for: "yq (https://...) version 4.44.1", "yq version v4.30.6", "yq 3.4.1"
+    local only_major="${1:-false}"
+
+    local version
+    version="$(yq --version 2>/dev/null || yq -V 2>/dev/null || true)"
+    version="${version##*[[:space:]]}"     # Trim text before the last space
+    version="${version#v}"                 # Remove leading 'v' if present
+    if $only_major; then
+        version="${version%%.*}"           # Extract major version
+    fi
+
+    printf '%s\n' "$version"
+}
+
+HAS_V4_YQ=true
+if [[ "$(get_yq_version true)" -lt 4 ]]; then
+    echo "Warning: yq version 4 or higher is recommended. Found version $(get_yq_version)." >&2
+    HAS_V4_YQ=false
+fi
+
+# -- parse arguments --
+
+FILE=""
+declare -a PARAMETERS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --parameter)
+            shift
+            if [[ -z "${1:-}" ]]; then
+                echo "Error: --parameter requires a value." >&2
+                exit 4
+            fi
+            PARAMETERS+=("$1")
+            shift
+            ;;
+        --help)
+            usage
+            exit 0
+            ;;
+        --*)
+            echo "Error: Unexpected argument '$1'." >&2
+            exit 4
+            ;;
+        *)
+            if [[ -z "$FILE" ]]; then
+                FILE="$1"
+            else
+                echo "Error: Unexpected argument '$1'." >&2
+                exit 4
+            fi
+            shift
+            ;;
+    esac
+done
+
+# -- check file existence --
+
+if [[ -z "$FILE" ]]; then
+    echo "Error: No file provided." >&2
+    exit 1
+fi
+if [[ ! -f "$FILE" ]]; then
+    echo "Error: File '$FILE' not found." >&2
+    exit 1
+fi
+
+# -- extract frontmatter --
+
+extract_frontmatter() {
+    local file="$1"
+    local out
+
+    if $HAS_V4_YQ && out="$(yq --front-matter extract --no-doc "$file" 2>/dev/null)"; then
+        # Check if the output is a valid YAML mapping
+        if ! printf '%s' "$out" | yq --output-format=yaml 'type =="!!map"' &>/dev/null; then
+            echo "Error: Extracted frontmatter is not a valid YAML mapping in $file" >&2
+            return 3
+        fi
+    else
+        # Only attempt manual extraction if the file starts with '---' (ignoring leading/trailing spaces and Windows line endings)
+        if head -n 1 "$file" | tr -d '\r' | grep -qE '^[[:space:]]*---[[:space:]]*$'; then
+            # Start on line 1 to ensure we only capture frontmatter at the top of the file
+            # And drop delimiter lines in the result
+            out="$(sed -n '/^1,/^[[:space:]]*---[[:space:]]*$/p' "$file" | sed '1d;$d')"
+        fi
+    fi
+
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+        echo "Error: No valid YAML frontmatter found at the top of $file" >&2
+        return 3
+    fi
+
+    printf '%s\n' "$out"
+    return 0
+}
+
+FRONTMATTER="$(extract_frontmatter "$FILE")" || exit $?
+
+# -- process parameters --
+
+get_parameter_with_pick() {
+    local param
+    param="${1:-}"
+    if [[ -z "$param" ]]; then
+        echo "Error: No parameter name provided." >&2
+        return 4
+    fi
+
+    local value
+    if ! value=$(echo "$FRONTMATTER" | yq --unwrapScalar --exit-status ".\"$param\"" 2>/dev/null); then
+        echo "Error: Parameter '$param' not found in frontmatter." >&2
+        echo "Try running without --parameter to see all available parameters." >&2
+        return 4
+    fi
+    if printf '%s' "$value" | yq --exit-status 'type == "!!map"' &>/dev/null; then
+        echo "Error: Parameter '$param' is a nested object. Nested objects are not supported." >&2
+        return 4
+    fi
+
+    if printf '%s' "$value" | yq --exit-status 'type == "!!seq"' &>/dev/null; then
+        # Convert each item to string, then join with commas
+        value="$(printf '%s' "$value" | yq --output-format=json '. | map(tostring) | join(",")')"
+    else
+        value="$(printf '%s' "$value" | yq --output-format=json '.')"  # JSON ensures strings are quoted and trimmed
+    fi
+
+    printf '%s' "$value"
+    return 0
+}
+
+get_parameter_fallback() {
+    local param
+    param="${1:-}"
+    if [[ -z "$param" ]]; then
+        echo "Error: No parameter name provided." >&2
+        return 4
+    fi
+    local value
+    if ! value=$(echo "$FRONTMATTER" | yq --compact-output --raw-output --exit-status ".\"$param\"" 2>/dev/null); then
+        echo "Error: Parameter '$param' not found in frontmatter." >&2
+        echo "Try running without --parameter to see all available parameters." >&2
+        return 4
+    fi
+    printf '%s' "$value"
+    return 0
+}
+
+found_parameters=()
+if [[ ${#PARAMETERS[@]} -eq 0 ]]; then
+    # No parameters specified, print all keys
+    printf '%s\n' "$FRONTMATTER" | yq -r "keys | .[]"
+    exit 0
+else
+    # Print specified parameters
+    declare param_value
+    for param in "${PARAMETERS[@]}"; do
+        if $HAS_V4_YQ; then
+            param_value="$(get_parameter_with_pick "$param")" || exit $?
+        else
+            param_value="$(get_parameter_fallback "$param")" || exit $?
+        fi
+        found_parameters+=("$(printf '%s\t%s' "$param" "$param_value")")
+    done
+fi
+
+# -- output results --
+for entry in "${found_parameters[@]}"; do
+    printf '%s\n' "$entry"
+done
+exit 0

@@ -10,10 +10,13 @@ Clone the repository then either
 - run `run.ps1` to build the website (use the `-publishfolder` parameter to specify the github pages folder, skipped if
 empty)
 
+## Testing
+
+Open a terminal in the `testing` folder and run `run.ps1` to start a container to test all scripts.
+
 ## To do
 
 - [ ] Replace the `ps1` script with a justfile
-- [ ] Add a deploy action to commit on the result of the build on my github pages
 
 ## How it works
 
