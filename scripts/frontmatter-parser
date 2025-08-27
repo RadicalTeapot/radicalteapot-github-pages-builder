@@ -9,7 +9,7 @@ set -eEuo pipefail
 # 4 - Parameter(s) not found / invalid
 
 usage() {
-    cat << 'USAGE'
+    cat <<'USAGE'
 Usage:
 frontmatter-parser.sh <file> [--parameter <name>]... [--help]
 
@@ -56,7 +56,7 @@ if [[ $# -lt 1 ]]; then
     exit 0
 fi
 
-if ! command -v yq &> /dev/null; then
+if ! command -v yq &>/dev/null; then
     echo "Error: Could not find yq in PATH." >&2
     exit 2
 fi
@@ -69,10 +69,10 @@ get_yq_version() {
 
     local version
     version="$(yq --version 2>/dev/null || yq -V 2>/dev/null || true)"
-    version="${version##*[[:space:]]}"     # Trim text before the last space
-    version="${version#v}"                 # Remove leading 'v' if present
+    version="${version##*[[:space:]]}" # Trim text before the last space
+    version="${version#v}"             # Remove leading 'v' if present
     if $only_major; then
-        version="${version%%.*}"           # Extract major version
+        version="${version%%.*}" # Extract major version
     fi
 
     printf '%s\n' "$version"
@@ -91,32 +91,32 @@ declare -a PARAMETERS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --parameter)
-            shift
-            if [[ -z "${1:-}" ]]; then
-                echo "Error: --parameter requires a value." >&2
-                exit 4
-            fi
-            PARAMETERS+=("$1")
-            shift
-            ;;
-        --help)
-            usage
-            exit 0
-            ;;
-        --*)
+    --parameter)
+        shift
+        if [[ -z "${1:-}" ]]; then
+            echo "Error: --parameter requires a value." >&2
+            exit 4
+        fi
+        PARAMETERS+=("$1")
+        shift
+        ;;
+    --help)
+        usage
+        exit 0
+        ;;
+    --*)
+        echo "Error: Unexpected argument '$1'." >&2
+        exit 4
+        ;;
+    *)
+        if [[ -z "$FILE" ]]; then
+            FILE="$1"
+        else
             echo "Error: Unexpected argument '$1'." >&2
             exit 4
-            ;;
-        *)
-            if [[ -z "$FILE" ]]; then
-                FILE="$1"
-            else
-                echo "Error: Unexpected argument '$1'." >&2
-                exit 4
-            fi
-            shift
-            ;;
+        fi
+        shift
+        ;;
     esac
 done
 
@@ -188,7 +188,7 @@ get_parameter_with_pick() {
         # Convert each item to string, then join with commas
         value="$(printf '%s' "$value" | yq --output-format=json '. | map(tostring) | join(",")')"
     else
-        value="$(printf '%s' "$value" | yq --output-format=json '.')"  # JSON ensures strings are quoted and trimmed
+        value="$(printf '%s' "$value" | yq --output-format=json '.')" # JSON ensures strings are quoted and trimmed
     fi
 
     printf '%s' "$value"
