@@ -32,22 +32,14 @@ Example:
 USAGE
 }
 
-err() {
-    local error_code
-    local error_line
-    error_code="${1:-}"
-    error_line="${2:-}"
-    if [[ -n "$error_code" && -n "$error_line" ]]; then
-        echo "Error: Script exited with code $error_code at line $error_line." >&2
-    elif [[ -n "$error_code" ]]; then
-        echo "Error: Script exited with code $error_code." >&2
-    else
-        echo "Error: An unknown error occurred." >&2
-    fi
-    exit "${error_code:-1}"
+die() {
+    local _ret="${2:-1}"
+    [[ "${_PRINT_HELP:-no}" == "yes" ]] && print_help >&2
+    printf '%s\n' "$1" >&2
+    exit "$_ret"
 }
 
-trap 'err $? $LINENO' ERR
+trap 'die "Error (exit $?): ${BASH_SOURCE[1]}:${BASH_LINENO[0]} in ${FUNCNAME[1]:-main}" $?' ERR
 
 # -- prerequisites check --
 
