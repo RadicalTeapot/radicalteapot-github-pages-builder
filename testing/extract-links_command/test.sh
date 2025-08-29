@@ -24,7 +24,7 @@ cleanup() {
 
 trap 'cleanup' EXIT
 
-test_wrapper() {
+test_runner() {
     local _func=${1?"Function name is required"}; shift || true
     local _description=${1:-"No description provided"}; [[ $# -gt 0 ]] && shift || true
 
@@ -59,5 +59,5 @@ test_empty_file() {
     fi
 }
 
-test_wrapper test_nonexistent_file "Expecting an error"
-test_wrapper test_empty_file "Expecting an empty result"
+test_runner test_nonexistent_file "Expecting an error"
+test_runner test_empty_file "Expecting an empty result"

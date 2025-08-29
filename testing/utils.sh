@@ -98,6 +98,17 @@ assert_empty() {
     return 0
 }
 
+assert_not_empty() {
+    local _value=$1
+    local _message=${2:-"Expected non-empty, got empty"}
+
+    if [[ -z "$_value" ]]; then
+        _print_inline "$_message"
+        return 1
+    fi
+    return 0
+}
+
 assert_success() {
     local _rc=${1:?Return code is required}
     local _message=${2:-"Expected success (0), got '$_rc'"}

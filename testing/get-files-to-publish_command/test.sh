@@ -24,7 +24,7 @@ cleanup() {
 
 trap 'cleanup' EXIT
 
-test_wrapper() {
+test_runner() {
     local _func=${1?"Function name is required"}; shift || true
     local _description=${1:-"No description provided"}; [[ $# -gt 0 ]] && shift || true
 
@@ -163,10 +163,10 @@ EOF
     fi
 }
 
-test_wrapper test_empty_directory_no_options "Expecting no output"
-test_wrapper test_empty_file_no_options "Expecting file path"
-test_wrapper test_empty_file_with_publish_option "Expecting no output"
-test_wrapper test_file_with_publish_false_no_option "Expecting file path"
-test_wrapper test_file_with_publish_false_with_option "Expecting no output"
-test_wrapper test_file_with_publish_true_with_no_option "Expecting file path"
-test_wrapper test_file_with_publish_true_with_option "Expecting file path"
+test_runner test_empty_directory_no_options "Expecting no output"
+test_runner test_empty_file_no_options "Expecting file path"
+test_runner test_empty_file_with_publish_option "Expecting no output"
+test_runner test_file_with_publish_false_no_option "Expecting file path"
+test_runner test_file_with_publish_false_with_option "Expecting no output"
+test_runner test_file_with_publish_true_with_no_option "Expecting file path"
+test_runner test_file_with_publish_true_with_option "Expecting file path"
