@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -Euo pipefail
+set -eEuo pipefail
 
 # shellcheck source=testing/utils.sh
 source "/testing/utils.sh"
@@ -25,27 +25,23 @@ cleanup() {
 trap 'cleanup' EXIT
 
 test_wrapper() {
-    local _func=$1
-    local _result_code
+    local _func=${1?"Function name is required"}; shift || true
+    local _description=${1:-"No description provided"}; [[ $# -gt 0 ]] && shift || true
 
     setup
-    if eval "$_func"; then
-        _result_code=0
-    else
-        _result_code=$?
-    fi
+    run_test "$_func" "$_func: $_description" "$@" || cleanup
     cleanup
-    return $_result_code
 }
 
 test_empty_directory_no_options() {
     local _result
-    if ! _result=$("$_command" "$_test_dir"); then
-        printf '%s' 'Command failed'
+    _result=$("$_command" "$_test_dir")
+
+    if ! assert_success $?; then
         return 1
     fi
-    if [[ ! -z "$_result" ]]; then
-        print "Expected no output for empty directory, got: $_result"
+
+    if ! assert_empty "$_result"; then
         return 1
     fi
 }
@@ -55,12 +51,14 @@ test_empty_file_no_options() {
     _path="${_test_dir}/empty.md"
     touch "$_path"
 
-    if ! _result=$("$_command" "$_test_dir"); then
-        printf '%s' 'Command failed'
+    local _result
+    _result=$("$_command" "$_test_dir")
+
+    if ! assert_success $?; then
         return 1
     fi
-    if [[ "$_result" != "$_path" ]]; then
-        printf '%s' "Expected $_path as output, got: $_result"
+
+    if ! assert_eq "$_result" "$_path"; then
         return 1
     fi
 }
@@ -70,12 +68,14 @@ test_empty_file_with_publish_option() {
     _path="${_test_dir}/empty.md"
     touch "$_path"
 
-    if ! _result=$("$_command" --only-published "$_test_dir"); then
-        print '%s' 'Command failed'
+    local _result
+    _result=$("$_command" --only-published "$_test_dir")
+
+    if ! assert_success $?; then
         return 1
     fi
-    if [[ ! -z "$_result" ]]; then
-        printf '%s' "Expected no output for empty file with publish option, got: $_result"
+
+    if ! assert_empty "$_result"; then
         return 1
     fi
 }
@@ -88,13 +88,14 @@ test_file_with_publish_false_no_option() {
 publish: false
 ---
 EOF
+    local _result
+    _result=$("$_command" "$_test_dir")
 
-    if ! _result=$("$_command" "$_test_dir"); then
-        printf '%s' 'Command failed'
+    if ! assert_success $?; then
         return 1
     fi
-    if [[ "$_result" != "$_path" ]]; then
-        printf '%s' "Expected $_path as output, got: $_result"
+
+    if ! assert_eq "$_result" "$_path"; then
         return 1
     fi
 }
@@ -108,12 +109,14 @@ publish: false
 ---
 EOF
 
-    if ! _result=$("$_command" --only-published "$_test_dir"); then
-        printf '%s' 'Command failed'
+    local _result
+    _result=$("$_command" --only-published "$_test_dir")
+
+    if ! assert_success $?; then
         return 1
     fi
-    if [[ ! -z "$_result" ]]; then
-        printf '%s' "Expected no output for file with publish: false and publish option, got: $_result"
+
+    if ! assert_empty "$_result"; then
         return 1
     fi
 }
@@ -127,12 +130,14 @@ publish: true
 ---
 EOF
 
-    if ! _result=$("$_command" "$_test_dir"); then
-        printf '%s' 'Command failed'
+    local _result
+    _result=$("$_command" "$_test_dir")
+
+    if ! assert_success $?; then
         return 1
     fi
-    if [[ "$_result" != "$_path" ]]; then
-        printf '%s' "Expected $_path as output, got: $_result"
+
+    if ! assert_eq "$_result" "$_path"; then
         return 1
     fi
 }
@@ -146,20 +151,22 @@ publish: true
 ---
 EOF
 
-    if ! _result=$("$_command" --only-published "$_test_dir"); then
-        printf '%s' 'Command failed'
+    local _result
+    _result=$("$_command" --only-published "$_test_dir")
+
+    if ! assert_success $?; then
         return 1
     fi
-    if [[ "$_result" != "$_path" ]]; then
-        printf '%s' "Expected $_path as output, got: $_result"
+
+    if ! assert_eq "$_result" "$_path"; then
         return 1
     fi
 }
 
-run_test 'test_wrapper test_empty_directory_no_options' "Empty directory without options, expecting no output"
-run_test 'test_wrapper test_empty_file_no_options' "Empty file without options, expecting file path"
-run_test 'test_wrapper test_empty_file_with_publish_option' "Empty file with publish option, expecting no output"
-run_test 'test_wrapper test_file_with_publish_false_no_option' "File with publish: false without options, expecting file path"
-run_test 'test_wrapper test_file_with_publish_false_with_option' "File with publish: false with publish option, expecting no output"
-run_test 'test_wrapper test_file_with_publish_true_with_no_option' "File with publish: true without options, expecting file path"
-run_test 'test_wrapper test_file_with_publish_true_with_option' "File with publish: true with publish option, expecting file path"
+test_wrapper test_empty_directory_no_options "Expecting no output"
+test_wrapper test_empty_file_no_options "Expecting file path"
+test_wrapper test_empty_file_with_publish_option "Expecting no output"
+test_wrapper test_file_with_publish_false_no_option "Expecting file path"
+test_wrapper test_file_with_publish_false_with_option "Expecting no output"
+test_wrapper test_file_with_publish_true_with_no_option "Expecting file path"
+test_wrapper test_file_with_publish_true_with_option "Expecting file path"

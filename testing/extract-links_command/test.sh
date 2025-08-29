@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -Euo pipefail
+set -eEuo pipefail
 
 # shellcheck source=testing/utils.sh
 source "/testing/utils.sh"
@@ -25,26 +25,23 @@ cleanup() {
 trap 'cleanup' EXIT
 
 test_wrapper() {
-    local _func=$1
-    local _result_code
+    local _func=${1?"Function name is required"}; shift || true
+    local _description=${1:-"No description provided"}; [[ $# -gt 0 ]] && shift || true
 
     setup
-    if eval "$_func"; then
-        _result_code=0
-    else
-        _result_code=$?
-    fi
+    run_test "$_func" "$_func: $_description" "$@" || cleanup
     cleanup
-    return $_result_code
 }
 
 test_nonexistent_file() {
     local _result
-    if _result="$(bash $_command "$_test_dir/nonexistent.md" 2>&1)"; then
-        printf '%s' "Expected non-zero exit code"
+    _result=$($_command "$_test_dir/nonexistent.md" 2>/dev/null)
+    if ! assert_failure $?; then
         return 1
     fi
-    return 0
+    if ! assert_empty "$_result"; then
+        return 1
+    fi
 }
 
 test_empty_file() {
@@ -52,18 +49,15 @@ test_empty_file() {
     local _path="$_test_dir/empty.md"
     touch "$_path"
 
-    if _result="$("$_command" "$_path" 2>/dev/null)"; then
-        printf '%s' "Expected non-zero exit code"
+    _result="$("$_command" "$_path" 2>/dev/null)"
+    if ! assert_failure $?; then
         return 1
     fi
 
-    if [[ -n "$_result" ]]; then
-        printf '%s' "Expected empty result, got: $_result"
+    if ! assert_empty "$_result"; then
         return 1
     fi
-
-    return 0
 }
 
-run_test 'test_wrapper test_nonexistent_file' "Test nonexistent file, should return error"
-run_test 'test_wrapper test_empty_file' "Test empty file, should return empty result"
+test_wrapper test_nonexistent_file "Expecting an error"
+test_wrapper test_empty_file "Expecting an empty result"

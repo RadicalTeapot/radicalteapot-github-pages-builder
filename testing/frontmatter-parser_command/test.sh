@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -eEuo pipefail
 
 # shellcheck source=testing/utils.sh
 source "/testing/utils.sh"
