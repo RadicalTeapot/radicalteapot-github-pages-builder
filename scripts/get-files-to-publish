@@ -32,12 +32,13 @@ validate_missing_alias() {
 print_help() {
     cat <<'USAGE'
 Output publishable markdown files in given directory
-Usage: get-files-to-publish [-p|--(no-)only-published] [-m|--missing-alias <arg>] [-h|--help] <directory>
+Usage: get-files-to-publish [-p|--(no-)only-published] [-m|--missing-alias <arg>] [-0|--print0] [-h|--help] <directory>
 
 Arguments:
     <directory>: Directory containing the markdown files
     -p, --only-published, --no-only-published: Output only files with a 'publish: true' option in their front-matter (off by default)
     -m, --missing-alias: Check for 'aliases' option if 'slug' or 'url' is set in file front-matter ('ignore', 'warn', 'skip-file' or 'error'. Default: 'ignore')
+    -0, --print0: Separate output filenames with null character (for use when piping to other commands)
     -h, --help: Prints help
 
 Examples:
@@ -57,6 +58,7 @@ USAGE
 _positionals=()
 _arg_only_published="off"
 _arg_missing_alias="ignore"
+_arg_print0="off"
 _arg_directory=""
 _markdown_extensions=("md")
 
@@ -90,6 +92,9 @@ parse_commandline() {
         -m*)
             _arg_missing_alias="${_key##-m}"
             validate_missing_alias "$_arg_missing_alias"
+            ;;
+        -0 | --print0)
+            _arg_print0="on"
             ;;
         -h | --help)
             print_help
@@ -225,7 +230,11 @@ main() {
         fi
     done
 
-    printf '%s\n' "${_files_to_publish[@]}"
+    if [[ "$_arg_print0" == "on" ]]; then
+        printf '%s\0' "${_files_to_publish[@]}"
+    else
+        printf '%s\n' "${_files_to_publish[@]}"
+    fi
 }
 
 # Validation and parsing

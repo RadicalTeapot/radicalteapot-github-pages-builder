@@ -13,7 +13,7 @@ trap 'die "Error (exit $?): ${BASH_SOURCE[1]}:${BASH_LINENO[0]} in ${FUNCNAME[1]
 print_help() {
     cat <<'USAGE'
 Extract links from given markdown file and filter them based on criteria
-Usage: extract-links [--internal] [--web] [--images] [--web-images] [-h|--help] <file>
+Usage: extract-links [--internal] [--web] [--images] [--web-images] [-0|--print0] [-h|--help] <file>
 
 Arguments:
     <file>: Markdown file to extract links from
@@ -21,6 +21,7 @@ Arguments:
     --web: Extract only web links (links starting with 'http://' or 'https://')
     --images: Extract only image links (links starting with '!' followed by '[')
     --web-images: Extract only web image links (image links starting with '![' followed by 'http://' or 'https://')
+    -0, --print0: Separate output links with null character (for use when piping to other commands)
     -h, --help: Prints help
 
 Examples:
@@ -45,6 +46,7 @@ _arg_web=
 _arg_images=
 _arg_web_images=
 _arg_file=""
+_arg_print0="off"
 
 # TODO: Check those
 _INTERNAL_LINK_REGEX='\[[^][]*\]\((\/[^()]+)\)(.*$)'
@@ -69,6 +71,9 @@ parse_commandline() {
             ;;
         --web-images)
             _arg_web_images="on"
+            ;;
+        -0 | --print0)
+            _arg_print0="on"
             ;;
         -h | --help)
             print_help
@@ -161,7 +166,12 @@ main() {
     if [[ "${#_lines[@]}" -eq 0 ]]; then
         die "No links found matching the specified criteria." 3
     fi
-    printf '%s\n' "${_lines[@]}" | sort -u
+
+    if [[ "$_arg_print0" == "on" ]]; then
+        printf '%s\0' "${_lines[@]}" | LC_ALL=C sort -uz
+    else
+        printf '%s\n' "${_lines[@]}" | LC_ALL=C sort -u
+    fi
 }
 
 # Validation and parsing
