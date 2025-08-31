@@ -42,6 +42,7 @@ Error codes:
     2: Missing or invalid source or output directory argument
     3: Cleaning errors
     4: Failed to copy files
+    5: Dependency issues
     99: Unexpected error
 USAGE
 }
@@ -58,15 +59,15 @@ _default_publish_args=(--only-published --missing-alias "warn")
 
 check_dependencies() {
     command -v get-files-to-publish &>/dev/null || \
-        die "get-files-to-publish command not found. Please install it and ensure it's in your PATH." 1
+        die "get-files-to-publish command not found. Please install it and ensure it's in your PATH." 5
     command -v extract-links &>/dev/null || \
-        die "extract-links command not found. Please install it and ensure it's in your PATH." 1
+        die "extract-links command not found. Please install it and ensure it's in your PATH." 5
     command -v rsync &>/dev/null || \
-        die "rsync command not found. Please install it and ensure it's in your PATH." 1
+        die "rsync command not found. Please install it and ensure it's in your PATH." 5
     command -v realpath &>/dev/null || \
-        die "realpath command not found. Please install it and ensure it's in your PATH." 1
-    if ((BASH_VERSINFO[0] < 4)); then
-        die "Bash version 4 or higher is required. Current version is ${BASH_VERSION}." 1
+        die "realpath command not found. Please install it and ensure it's in your PATH." 5
+    if (( BASH_VERSINFO[0] < 4 )); then
+        die "Bash version 4 or higher is required. Current version is ${BASH_VERSION}." 5
     fi
 }
 
@@ -132,8 +133,8 @@ validate_arguments() {
 }
 
 resolve_directories() {
-    _src="$(cd -- "$_arg_source_directory" && pwd -P)" || die "Cannot resolve source." 2
-    _out="$(mkdir -p -- "$_arg_output_directory" && cd -- "$_arg_output_directory" && pwd -P)" || die "Cannot resolve output." 2
+    _src="$(realpath -m -- "$_arg_source_directory")" || die "Cannot resolve source." 2
+    _out="$(realpath -m -- "$_arg_output_directory")" || die "Cannot resolve output." 2
 }
 
 # -- publish site --
@@ -167,7 +168,6 @@ clean_output_directory() {
         die "Output directory '$_out' cannot be a subdirectory of the source directory '$_src'." 3
     fi
 
-
     if [[ -d "$_out" ]]; then
         if [[ ! -w "$_out" ]]; then
             die "Output directory '$_out' is not writable." 3
@@ -186,6 +186,8 @@ clean_output_directory() {
         # Clean the output content and preserve the directory itself for safety
         # shellcheck disable=SC2115 # (safe because of previous checks)
         rm -rf -- "$_out"/* "$_out"/.[!.]* "$_out"/..?* 2>/dev/null || true
+    else
+        mkdir -p -- "$_out" || die "Failed to create output directory '$_out'." 3
     fi
 }
 

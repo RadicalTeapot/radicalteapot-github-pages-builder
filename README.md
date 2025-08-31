@@ -17,6 +17,11 @@ Open a terminal in the `testing` folder and run `run.ps1` to start a container t
 ## To do
 
 - [ ] Replace the `ps1` script with a justfile
+- [ ] Write tests for all scripts
+- [ ] Use `validate-markdown-content` command in other commands (at least `get-files-to-publish` and maybe `extract-links`)
+- [ ] Update `frontmatter-parser` (see TODOs in command code)
+- [ ] Add a check stage to justfile to check content of markdown files using `validate-markdown-content` command
+
 
 ## How it works
 

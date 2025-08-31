@@ -1,0 +1,293 @@
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+# TODO: Tests
+# No flags: file exists/doesn’t exist.
+# --has-links-relative-to with:
+#   - relative links inside root,
+#   - absolute links inside root,
+#   - ../ escaping root (should warn/error).
+# --has-path-as-alias with:
+#   - slug/url present + aliases missing/present, including path with spaces.
+
+# Helpers
+log()   { printf '%s\n' "$*" >&2; }
+warn()  { printf '[WARN]  %s\n' "$*" >&2; }
+error() { printf '[ERROR] %s\n' "$*" >&2; }
+is_on() { [[ "$1" == "on" ]]; }
+
+die() {
+    local -r ret="${2:-1}"
+    [[ "${_PRINT_HELP:-no}" == "yes" ]] && print_help >&2
+    error "$1"
+    exit "$ret"
+}
+
+trap 'die "Error (exit $?): ${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}:${BASH_LINENO[0]} in ${FUNCNAME[1]:-main}" 99' ERR
+
+print_help() {
+    cat <<'USAGE'
+Check markdown content for common issues that would prevent publishing.
+Usage: validate-markdown-content [-h|--help] [-s|--strict] [--has-links-relative-to] [--has-path-as-alias] <file> [<root-directory>]
+
+Arguments:
+    <file>                  Path to the markdown file to validate
+    <root-directory>        Root directory to which links should be relative (required if --has-links-relative-to is set or --has-path-as-alias is set)
+    -h, --help              Display this help message and exit
+    -s, --strict            Enable strict mode (treat warnings as errors)
+    --has-links-relative-to Check that all links are relative to the root directory (default: off)
+    --has-path-as-alias     Check that the file path is listed as an alias in the frontmatter if slug or url parameters are present (default: off)
+
+Examples:
+    validate-markdown-content README.md
+    validate-markdown-content -s --has-links-relative-to docs/guide.md docs
+
+Dependencies:
+    - extract-links
+    - frontmatter-parser
+    - realpath
+    - Bash 4.0 or higher
+
+Error codes:
+    1: Invalid command line arguments
+    2: File not found or not readable
+    3: Dependency issues
+    4: Link validation failed
+    5: Alias validation failed
+    99: Unexpected error
+USAGE
+}
+
+_arg_file_path=""
+_abs_file_path=""
+_root_directory_required="off"
+_arg_root_directory=""
+_abs_root_directory=""
+_arg_strict_mode="off"
+_check_links_relative_to="off"
+_check_path_as_alias="off"
+
+check_dependencies() {
+    command -v extract-links >/dev/null || \
+        die "extract-links command not found. Please install it and ensure it's in your PATH." 3
+    command -v frontmatter-parser >/dev/null || \
+        die "frontmatter-parser command not found. Please install it and ensure it's in your PATH." 3
+    command -v realpath >/dev/null || \
+        die "realpath command not found. Please install it and ensure it's in your PATH." 3
+    (( BASH_VERSINFO[0] >= 4 )) || \
+        die "Bash version 4 or higher is required. Current version is ${BASH_VERSION}." 3
+}
+
+parse_commandline() {
+    local _key
+    local -a _positionals=()
+    while [[ $# -gt 0 ]]; do
+        _key="$1"
+        case "$_key" in
+            -h|--help)
+                print_help
+                exit 0
+                ;;
+            -s|--strict)
+                _arg_strict_mode="on"
+                shift
+                ;;
+            --has-links-relative-to)
+                _check_links_relative_to="on"
+                _root_directory_required="on"
+                shift
+                ;;
+            --has-path-as-alias)
+                _check_path_as_alias="on"
+                _root_directory_required="on"
+                shift
+                ;;
+            --) # end of options
+                shift
+                while [[ $# -gt 0 ]]; do
+                    _positionals+=("$1")
+                    shift
+                done
+                ;;
+            -*) # unknown option
+                _PRINT_HELP=yes die "Unknown option: $1"
+                ;;
+            *)  # positional argument
+                _positionals+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if ! is_on "$_root_directory_required" && [[ ${#_positionals[@]} -lt 1 ]]; then
+        _PRINT_HELP=yes die "One positional argument (file path) is required." 1
+    elif is_on "$_root_directory_required" && [[ ${#_positionals[@]} -lt 2 ]]; then
+        _PRINT_HELP=yes die "Two positional arguments (file path and root directory) are required." 1
+    elif [[ ${#_positionals[@]} -gt 2 ]]; then
+        _PRINT_HELP=yes die "Too many positional arguments (file path and optional root directory) provided." 1
+    fi
+
+    _arg_file_path="${_positionals[0]}"
+    if is_on "$_root_directory_required"; then
+        _arg_root_directory="${_positionals[1]}"
+    fi
+}
+
+validate_arguments() {
+    case "$_arg_strict_mode" in
+        on|off) ;;
+        *) die "Internal error: Invalid value for strict mode: $_arg_strict_mode. Allowed values are 'on' or 'off'." 1 ;;
+    esac
+
+    case "$_check_links_relative_to" in
+        on|off) ;;
+        *) die "Internal error: Invalid value for --has-links-relative-to: $_check_links_relative_to. Allowed values are 'on' or 'off'." 1 ;;
+    esac
+
+    case "$_check_path_as_alias" in
+        on|off) ;;
+        *) die "Internal error: Invalid value for --has-path-as-alias: $_check_path_as_alias. Allowed values are 'on' or 'off'." 1 ;;
+    esac
+
+    case "$_root_directory_required" in
+        on|off) ;;
+        *) die "Internal error: Invalid value for root directory required flag: $_root_directory_required. Allowed values are 'on' or 'off'." 1 ;;
+    esac
+
+    [[ -z "$_arg_file_path" ]] && die "File path is required." 1
+
+    resolve_file
+    [[ ! -f "$_abs_file_path" || ! -r "$_abs_file_path" ]] && \
+        die "File '$_abs_file_path' does not exist or is not readable." 2
+
+    if is_on "$_root_directory_required"; then
+        [[ -z "$_arg_root_directory" ]] && die "Root directory required" 1
+        resolve_root
+        [[ ! -d "$_abs_root_directory" ]] && die "Root directory '$_abs_root_directory' does not exist." 2
+    fi
+}
+
+resolve_file() {
+    _abs_file_path="$(realpath -m -- "$_arg_file_path")" || die "Failed to resolve file '$_arg_file_path'." 2
+}
+
+resolve_root() {
+    _abs_root_directory="$(realpath -m -- "$_arg_root_directory")" || die "Failed to resolve directory '$_arg_root_directory'." 2
+}
+
+get_path_relative_to_root() {
+    local _file="$1"
+    if [[ "$_file" != /* ]]; then
+        _file="$(realpath -m -- "$_abs_root_directory/$_file")" || return 1
+    else
+        _file="$(realpath -m -- "$_file")" || return 1
+    fi
+    [[ "$_file" != "$_abs_root_directory/"* ]] && return 1
+    printf '%s' "${_file#"$_abs_root_directory"/}"
+}
+
+report_issue() {
+    local -r _message="$1"
+    local -r _error_code="${2:-99}"
+    if is_on "$_arg_strict_mode"; then
+        die "$_message" "$_error_code"
+    else
+        warn "$_message"
+    fi
+}
+
+# Check that all links in the markdown file are relative to the specified root directory and point to existing files.
+# Errors:
+#   - Link cannot be resolved relative to root directory.
+#   - Link points to a non-existent file.
+check_links() {
+    local _links
+    if ! _links="$(extract-links --internal --images --print0 -- "$_abs_file_path" 2>/dev/null)"; then
+        report_issue "Failed to extract links from file '$_abs_file_path'." 4
+        return
+    fi
+
+    local -a _linkArray
+    readarray -d '' -t _linkArray <<< "$_links"
+
+    local _link _rel_link
+    for _link in "${_linkArray[@]}"; do
+        if ! _rel_link="$(get_path_relative_to_root "$_link")"; then
+            report_issue "Link '$_link' in file '$_abs_file_path' cannot be resolved relative to root '$_abs_root_directory'." 4
+            continue
+        fi
+        if [[ ! -e "$_abs_root_directory/$_rel_link" ]]; then
+            report_issue "Link '$_link' in file '$_abs_file_path' points to a non-existent file." 4
+        fi
+    done
+}
+
+# Generate a NUL-terminated list of possible alias candidates for a given file path.
+# This includes:
+#   - The full file path with and without leading slash
+#   - The file path without extension with and without leading slash
+get_alias_candidates() {
+    local -r _file_path="$1"
+    local -r _base="${_file_path%.*}"  # Remove extension
+    printf '%s0' \
+        "$_file_path" "${_file_path#/}" "/${_file_path}" \
+        "$_base" "${_base#/}" "/${_base}"
+}
+
+# If 'slug' or 'url' is set in frontmatter, ensure that the file path relative to root is listed in 'aliases'.
+# This ensures that the content is accessible via its path even if 'slug' or 'url' changes.
+# If 'slug' and 'url' are not set, no check is performed.
+# Errors:
+#   - 'slug' or 'url' is set but 'aliases' is missing or empty.
+#   - 'slug' or 'url' is set but the file path relative to root is not listed in 'aliases'.
+check_path_as_alias() {
+    local _slug
+    local _url
+    _slug="$(frontmatter-parser --parameter slug -- "$_abs_file_path" 2>/dev/null || printf '')"
+    _url="$(frontmatter-parser --parameter url -- "$_abs_file_path" 2>/dev/null || printf '')"
+
+    if [[ -n "$_slug" || -n "$_url" ]]; then
+        local -a _aliases
+        readarray -d '' -t _aliases < <(frontmatter-parser --parameter aliases --print0 -- "$_abs_file_path" 2>/dev/null || printf '')
+        if [[ ${#_aliases[@]} -eq 0 ]]; then
+            report_issue "File '$_abs_file_path' has 'slug' or 'url' set but no 'aliases' option." 5
+            return
+        fi
+
+        local -A _alias_map
+        local _alias
+        for _alias in "${_aliases[@]}"; do
+            _alias_map["${_alias}"]=1
+        done
+
+        local _file_path_relative
+        if ! _file_path_relative="$(get_path_relative_to_root "$_abs_file_path")"; then
+            report_issue "File path '$_abs_file_path' cannot be resolved relative to root '$_abs_root_directory'." 5
+            return
+        fi
+
+        local _found=
+        local _candidates
+        readarray -d '' -t _candidates < <(get_alias_candidates "$_file_path_relative")
+        for _alias in "${_candidates[@]}"; do
+            if [[ -n "$_alias" && -n "${_alias_map["$_alias"]+_}" ]]; then
+                _found=1
+                break
+            fi
+        done
+
+        if [[ -z $_found ]]; then
+            report_issue "File path '$_file_path_relative' is not listed in aliases in file '$_abs_file_path'." 5
+        fi
+    fi
+}
+
+main() {
+    check_dependencies
+    parse_commandline "$@"
+    validate_arguments
+    is_on "$_check_links_relative_to" && check_links
+    is_on "$_check_path_as_alias" && check_path_as_alias
+    log "Validation of '$_arg_file_path' completed successfully."
+}
+main "$@"
