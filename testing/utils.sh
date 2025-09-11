@@ -76,8 +76,8 @@ run_test() {
 }
 
 assert_eq() {
-    local _expected=${1:?Expected value is required}
-    local _actual=${2:?Actual value is required}
+    local _actual=${1:?Actual value is required}
+    local _expected=${2:?Expected value is required}
     local _message=${3:-"Expected '$_expected', got '$_actual'"}
 
     if [[ "$_expected" != "$_actual" ]]; then

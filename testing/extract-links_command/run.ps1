@@ -1,11 +1,13 @@
 param(
-    [bool]$interactive = $false
+    [switch]$Interactive
 )
 
-podman build --target testing -t test ../..
-if ($interactive) {
+Write-Host "Building ..."
+podman build --target testing -t test ../.. > $null
+if ($Interactive) {
     podman run -it --rm test "bash"
 }
 else {
+    Write-Host "Running tests ..."
     podman run --rm test "bash" "./extract-links_command/test.sh"
 }

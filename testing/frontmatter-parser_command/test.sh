@@ -70,10 +70,9 @@ test_single_with_leading_and_trailing_space() {
 
 test_no_parameter() {
     local _result
-    local _arr
     _result="$(bash $_command $_test_file)"
 
-    readarray -t _arr < <(printf '%s' "$_result")
+    readarray -t _arr < <(printf '%s' "$_result") # trim trailing newlines
     if ! assert_eq ${#_arr[@]} 5 "Expected at 5 lines, got ${#_arr[@]}"; then
         return 1
     fi
@@ -110,7 +109,7 @@ test_array() {
 }
 
 test_nested() {
-    "$_command" "$_test_file" --parameter "nested" 2>/dev/null
+    "$_command" "$_test_file" --parameter "nested"
     if ! assert_failure $?; then
         return 1
     fi
@@ -130,6 +129,69 @@ test_non_existing_parameter() {
     fi
 }
 
+test_value_only_option() {
+    local _result
+    _result="$($_command $_test_file --parameter "no-space" --value-only)"
+    if ! assert_not_empty "$_result"; then
+        return 1
+    fi
+
+    if ! assert_eq "$_result" '"Test-Document"'; then
+        return 1
+    fi
+}
+
+test_print0() {
+    local -a _result
+    readarray -d '' -t _result < <("$_command" --parameter "no-space" --print0 "$_test_file")
+    if ! assert_success $?; then
+        return 1
+    fi
+
+    if ! assert_eq ${#_result[@]} 2 "Expected 2 elements, got ${#_result[@]}"; then
+        return 1
+    fi
+
+    if ! assert_eq "${_result[0]}" "no-space" || ! assert_eq "${_result[1]}" '"Test-Document"'; then
+        return 1
+    fi
+}
+
+test_value_only_multi_parameter_print0() {
+    local -a _result
+    readarray -d '' -t _result < <("$_command" --parameter "no-space" --parameter "with-space" --value-only --print0 "$_test_file")
+    if ! assert_success $?; then
+        return 1
+    fi
+
+    if ! assert_eq ${#_result[@]} 2 "Expected 2 elements, got ${#_result[@]}"; then
+        return 1
+    fi
+
+    if ! assert_eq "${_result[0]}" '"Test-Document"' || ! assert_eq "${_result[1]}" '"Test Document"'; then
+        return 1
+    fi
+}
+
+test_array_print0() {
+    local -a _result
+    readarray -d '' -t _result < <("$_command" --parameter "array" --print0 "$_test_file")
+    if ! assert_success $?; then
+        return 1
+    fi
+
+    if ! assert_eq ${#_result[@]} 4 "Expected 4 elements, got ${#_result[@]}"; then
+        return 1
+    fi
+
+    if ! assert_eq "${_result[0]}" "array" \
+        || ! assert_eq "${_result[1]}" '  Item 1  ' \
+        || ! assert_eq "${_result[2]}" 'Item 2' \
+        || ! assert_eq "${_result[3]}" '  Item 3'; then
+        return 1
+    fi
+}
+
 # Run tests
 # Still to test:
 # - no front‑matter;
@@ -137,7 +199,6 @@ test_non_existing_parameter() {
 # - CRLF line endings;
 # - non‑map front‑matter (e.g., ---\n- a\n- b\n---);
 # - values of type: number, boolean
-# - multiple --parameter.
 
 test_runner test_single_no_space "Expecting single parameter without space"
 test_runner test_single_with_space "Expecting single parameter with space"
@@ -147,3 +208,7 @@ test_runner test_array "Expecting correct array extraction"
 test_runner test_nested "Expecting failure"
 test_runner test_non_existing_file "Extract failure"
 test_runner test_non_existing_parameter "Extract failure"
+test_runner test_value_only_option "Expecting value only"
+test_runner test_print0 "Expecting null-terminated output"
+test_runner test_value_only_multi_parameter_print0 "Expecting value only with multiple parameters and null-terminated output"
+test_runner test_array_print0 "Expecting array extraction with null-terminated output"

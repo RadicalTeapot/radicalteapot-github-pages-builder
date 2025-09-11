@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+# Helpers
+log()   { printf '%s\n' "$*" >&2; }
+warn()  { printf '[WARN]  %s\n' "$*" >&2; }
+error() { printf '[ERROR] %s\n' "$*" >&2; }
+is_on() { [[ "$1" == "on" ]]; }
+
 die() {
     local _ret="${2:-1}"
-    [[ "${_PRINT_HELP:-no}" == "yes" ]] && print_help >&2
-    printf '%s\n' "$1" >&2
+    if [[ "${_PRINT_HELP:-no}" == "yes" ]]; then print_help >&2; fi
+    error "$1"
     exit "$_ret"
 }
 
@@ -13,22 +19,23 @@ trap 'die "Error (exit $?): ${BASH_SOURCE[1]}:${BASH_LINENO[0]} in ${FUNCNAME[1]
 print_help() {
     cat <<'USAGE'
 Extract links from given markdown file and filter them based on criteria
-Usage: extract-links [--internal] [--web] [--images] [--web-images] [-0|--print0] [-h|--help] <file>
+Usage: extract-links [--internal] [--web] [--images] [--web-images] [-0|--print0] [-h|--help] [--] <file>
 
 Arguments:
-    <file>: Markdown file to extract links from
-    --internal: Extract only internal links (links starting with '/')
-    --web: Extract only web links (links starting with 'http://' or 'https://')
-    --images: Extract only image links (links starting with '!' followed by '[')
-    --web-images: Extract only web image links (image links starting with '![' followed by 'http://' or 'https://')
-    -0, --print0: Separate output links with null character (for use when piping to other commands)
-    -h, --help: Prints help
+    <file>          Markdown file to extract links from
+    -0, --print0    Separate output links with null character (for use when piping to other commands)
+    -h, --help      Display this help message and exit
+    --internal      Extract only internal links (links starting with '/')
+    --web           Extract only web links (links starting with 'http://' or 'https://')
+    --images        Extract only image links (links starting with '!' followed by '[')
+    --web-images    Extract only web image links (image links starting with '![' followed by 'http://' or 'https://')
+    --              End of options (useful if file paths start with a dash)
 
 Examples:
     extract-links ./content/posts/my-post.md
     extract-links --internal ./content/posts/my-post.md
-    extract-links --web ./content/posts/my-post.md
-    extract-links --internal --images ./content/posts/my-post.md
+    extract-links --web --print0 ./content/posts/my-post.md
+    extract-links --internal --images -- ./content/posts/my-post.md
 
 Remarks:
     If no filtering options are provided, all links will be extracted.
@@ -49,69 +56,69 @@ _arg_file=""
 _arg_print0="off"
 
 # TODO: Check those
-_INTERNAL_LINK_REGEX='\[[^][]*\]\((\/[^()]+)\)(.*$)'
+_INTERNAL_LINK_REGEX='\[[^][]*\]\(([^()]+)\)(.*$)'
 _WEB_LINK_REGEX='\[[^][]*\]\((https?:\/\/[^()]+)\)(.*$)'
 _INTERNAL_IMAGES_LINK_REGEX='!\[[^][]*\]\(([^()]+)\)(.*$)'
 _WEB_IMAGES_LINK_REGEX='!\[[^][]*\]\((https?:\/\/[^()]+)\)(.*$)'
 
 parse_commandline() {
-    _positionals_count=0
     local _key
     while [[ $# -gt 0 ]]; do
         _key="$1"
         case "$_key" in
         --internal)
             _arg_internal="on"
+            shift
             ;;
         --web)
             _arg_web="on"
+            shift
             ;;
         --images)
             _arg_images="on"
+            shift
             ;;
         --web-images)
             _arg_web_images="on"
+            shift
             ;;
         -0 | --print0)
             _arg_print0="on"
+            shift
             ;;
         -h | --help)
             print_help
             exit 0
             ;;
+        --)
+            shift
+            while [[ $# -gt 0 ]]; do
+                _positionals+=("$1")
+                shift
+            done
+            ;;
         *)
-            _last_positional="$1"
-            _positionals+=("$_last_positional")
-            _positionals_count=$((_positionals_count + 1))
+            _positionals+=("$1")
+            shift
             ;;
         esac
-        shift
     done
-}
 
-handle_passed_args_count() {
-    local _required_args_string="'file'"
-    [[ "${_positionals_count}" -ge 1 ]] || _PRINT_HELP=yes die "FATAL ERROR: Not enough positional arguments - we require exactly 1 (namely: $_required_args_string), but got only ${_positionals_count}." 1
-    [[ "${_positionals_count}" -le 1 ]] || _PRINT_HELP=yes die "FATAL ERROR: There were spurious positional arguments --- we expect exactly 1 (namely: $_required_args_string), but got ${_positionals_count} (the last one was: '${_last_positional}')." 1
-}
+    local _positionals_count=${#_positionals[@]}
+    if [[ "${_positionals_count}" -lt 1 ]]; then
+        _PRINT_HELP=yes die "One positional argument (file path) is required." 1
+    fi
+    if [[ "${_positionals_count}" -gt 1 ]]; then
+        _PRINT_HELP=yes die "Too many positional arguments provided (expected 1, got $_positionals_count)." 1
+    fi
 
-assign_positional_args() {
-    # Note: this is where _arg_file gets filled (given to _positional_names and filled by eval in the loop)
-    local _positional_name _shift_for=$1
-    _positional_names="_arg_file " # space at the end is intentional
-
-    shift "$_shift_for"
-    for _positional_name in ${_positional_names}; do
-        [[ $# -gt 0 ]] || break
-        eval "$_positional_name=\${1}" || die "Error during argument parsing, possibly an Argbash bug." 1
-        shift
-    done
+    _arg_file="${_positionals[0]}"
 }
 
 validate_arg_file() {
-    [[ -n "$_arg_file" ]] || die "Error: Missing required argument: file" 2
-    [[ -f "$_arg_file" ]] || die "Error: File '$_arg_file' does not exist or is not a regular file." 2
-    [[ -r "$_arg_file" ]] || die "Error: File '$_arg_file' is not readable." 2
+    if [[ -z "$_arg_file" ]]; then die "Missing required argument: file" 2; fi
+    if [[ ! -f "$_arg_file" ]]; then die "File '$_arg_file' does not exist or is not a regular file." 2; fi
+    if [[ ! -r "$_arg_file" ]]; then die "File '$_arg_file' is not readable." 2; fi
 }
 
 get_regexes() {
@@ -176,8 +183,6 @@ main() {
 
 # Validation and parsing
 parse_commandline "$@"
-handle_passed_args_count
-assign_positional_args 1 "${_positionals[@]}"
 validate_arg_file
 
 # Run the script

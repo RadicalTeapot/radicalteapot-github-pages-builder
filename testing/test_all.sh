@@ -12,3 +12,7 @@ printf '%s\n' "=== frontmatter-parser done ==="
 printf '\n%s' "=== Running extract-links tests ==="
 ./extract-links_command/test.sh
 printf '%s\n' "=== extract-links done ==="
+
+printf '\n%s' '=== Running validate-markdown-content tests ==='
+./validate-markdown-content_command/test.sh
+printf '%s\n' '=== validate-markdown-content done ==='

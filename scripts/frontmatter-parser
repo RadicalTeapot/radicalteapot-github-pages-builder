@@ -1,233 +1,323 @@
 #!/usr/bin/env bash
-
 set -eEuo pipefail
 
-# TODO: Harmonize this with other scripts
-# TODO: Add print0 option
-# TODO: Add option to output only values, without parameter names
+# Helpers
+log()   { printf '%s\n' "$*" >&2; }
+warn()  { printf '[WARN]  %s\n' "$*" >&2; }
+error() { printf '[ERROR] %s\n' "$*" >&2; }
+is_on() { [[ "$1" == "on" ]]; }
 
-# Exit codes:
-# 1 - File not found
-# 2 - yq not available
-# 3 - YAML frontmatter not found / empty
-# 4 - Parameter(s) not found / invalid
+die() {
+    local -r ret="${2:-1}"
+    if is_on "${_PRINT_HELP:-no}"; then print_help >&2; fi
+    error "$1"
+    exit "$ret"
+}
 
-usage() {
+trap 'die "Error (exit $?): ${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}:${LINENO} in ${FUNCNAME[1]:-main}" 99' ERR
+
+print_help() {
     cat <<'USAGE'
-Usage:
-frontmatter-parser.sh <file> [--parameter <name>]... [--help]
+Extracts parameters from YAML frontmatter in a file.
+Usage: frontmatter-parser.sh [-p|--parameter <name>]... [-0|--print0] [--value-only] [--help] [--] <file>
 
 Parameters:
-    <file>              Path to the file containing YAML frontmatter.
-    --parameter <name>  Specify a parameter to extract from the frontmatter.
-                        Can be specified multiple times.
-    --help              Show this help message and exit.
+    <file>                  Path to the file containing YAML frontmatter.
+    -p, --parameter <name>  Specify a parameter to extract from the frontmatter.
+                            Can be specified multiple times.
+    -0, --print0            Output results separated by null characters instead of newlines.
+    --value-only            Output only the values of the specified parameters, without parameter names.
+    --help                  Display this help message and exit.
 
 Returns:
-    - If --parameter is specified: prints each parameter and its value in the format "<parameter> <value>".
-    - If no --parameter is specified: prints all parameter names in the frontmatter, one per line.
+    - If --parameter is specified:
+        - without the --value-only option: prints each parameter and its value in the format "<parameter> <value>", one per line or null-separated if --print0 is used.
+        - with the --value-only option: prints only the values, one per line or null-separated if --print0 is used.
+    - If no --parameter is specified: prints all parameter names in the frontmatter, one per line or null-separated if --print0 is used.
+
+Examples:
+    frontmatter-parser.sh example.md --parameter title --parameter author
+    frontmatter-parser.sh example.md
 
 Dependencies:
     - yq                A command-line YAML processor (https://github.com/mikefarah/yq)
 
-Example:
-    frontmatter-parser.sh example.md --parameter title --parameter author
-    frontmatter-parser.sh example.md
+Error Codes:
+    1: Invalid command line arguments
+    2: File not found
+    3: Dependency (yq) issues
+    4: YAML frontmatter not found / empty
+    5: Parameter(s) not found / invalid
+    99: Unexpected error
 USAGE
 }
 
-die() {
-    local _ret="${2:-1}"
-    [[ "${_PRINT_HELP:-no}" == "yes" ]] && print_help >&2
-    printf '%s\n' "$1" >&2
-    exit "$_ret"
+_arg_file_path=""
+_arg_print0="off"
+_arg_value_only="off"
+_arg_parameters=()
+_print_all_parameters="off"
+_has_v4_yq="on"
+
+check_dependencies() {
+    if ! command -v yq &>/dev/null; then
+        die "Dependency 'yq' not found. Please install it and ensure it's in your PATH." 3
+    fi
 }
-
-trap 'die "Error (exit $?): ${BASH_SOURCE[1]}:${BASH_LINENO[0]} in ${FUNCNAME[1]:-main}" $?' ERR
-
-# -- prerequisites check --
-
-if [[ $# -lt 1 ]]; then
-    usage
-    exit 0
-fi
-
-if ! command -v yq &>/dev/null; then
-    echo "Error: Could not find yq in PATH." >&2
-    exit 2
-fi
 
 # Function to get the installed yq version
 # Returns the full version by default, or just the major version if the first argument is "true"
 get_yq_version() {
     # Works for: "yq (https://...) version 4.44.1", "yq version v4.30.6", "yq 3.4.1"
-    local only_major="${1:-false}"
+    local _version _major
+    _version="$(yq --version 2>/dev/null || yq -V 2>/dev/null || true)"
+    _version="${_version##*[[:space:]]}" # Trim text before the last space
+    _version="${_version#v}"             # Remove leading 'v' if present
+    _major="${_version%%.*}"             # Extract major version
 
-    local version
-    version="$(yq --version 2>/dev/null || yq -V 2>/dev/null || true)"
-    version="${version##*[[:space:]]}" # Trim text before the last space
-    version="${version#v}"             # Remove leading 'v' if present
-    if $only_major; then
-        version="${version%%.*}" # Extract major version
+    if [[ "$_major" -lt 4 ]]; then
+        warn "yq version 4 or higher is recommended. Found version ${_version}."
+        _has_v4_yq="off"
     fi
-
-    printf '%s\n' "$version"
 }
-
-HAS_V4_YQ=true
-if [[ "$(get_yq_version true)" -lt 4 ]]; then
-    echo "Warning: yq version 4 or higher is recommended. Found version $(get_yq_version)." >&2
-    HAS_V4_YQ=false
-fi
 
 # -- parse arguments --
 
-FILE=""
-declare -a PARAMETERS=()
+parse_commandline() {
+    local _key
+    local -a _positionals=()
+    while [[ $# -gt 0 ]]; do
+        _key="$1"
+        case "$_key" in
+            -p|--parameter)
+                shift
+                if [[ -z "${1:-}" ]]; then
+                    _PRINT_HELP="yes" die "--parameter requires a value." 1
+                fi
+                _arg_parameters+=("$1")
+                shift
+                ;;
+            -h|--help)
+                print_help
+                exit 0
+                ;;
+            -0|--print0)
+                _arg_print0="on"
+                shift
+                ;;
+            --value-only)
+                _arg_value_only="on"
+                shift
+                ;;
+            --) # End of all options
+                shift
+                while [[ $# -gt 0 ]]; do
+                    _positionals+=("$1")
+                    shift
+                done
+                ;;
+            -*) # Unknown option
+                _PRINT_HELP="yes" die "Unknown option '$1'." 1
+                ;;
+            *) # Positional argument
+                _positionals+=("$1")
+                shift
+                ;;
+        esac
+    done
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-    --parameter)
-        shift
-        if [[ -z "${1:-}" ]]; then
-            echo "Error: --parameter requires a value." >&2
-            exit 4
-        fi
-        PARAMETERS+=("$1")
-        shift
-        ;;
-    --help)
-        usage
-        exit 0
-        ;;
-    --*)
-        echo "Error: Unexpected argument '$1'." >&2
-        exit 4
-        ;;
-    *)
-        if [[ -z "$FILE" ]]; then
-            FILE="$1"
-        else
-            echo "Error: Unexpected argument '$1'." >&2
-            exit 4
-        fi
-        shift
-        ;;
+    if [[ ${#_positionals[@]} -lt 1 ]]; then
+        _PRINT_HELP="yes" die "No input file specified." 1
+    elif [[ ${#_positionals[@]} -gt 1 ]]; then
+        _PRINT_HELP="yes" die "Multiple input files specified. Please provide only one." 1
+    fi
+
+    if [[ ${#_arg_parameters[@]} -eq 0 ]]; then
+        _print_all_parameters="on"
+    fi
+
+    _arg_file_path="${_positionals[0]}"
+}
+
+
+validate_arguments() {
+    if [[ -z "$_arg_file_path" ]]; then
+        _PRINT_HELP="yes" die "No input file specified." 1
+    fi
+    if [[ ! -f "$_arg_file_path" ]]; then
+        die "File '$_arg_file_path' not found." 2
+    fi
+
+    # Internal errors
+    case "$_arg_print0" in
+        on|off) ;;
+        *) _PRINT_HELP="yes" die "Internal error: Invalid value for --print0: '$_arg_print0'. Allowed values are 'on' or 'off'." 1 ;;
     esac
-done
-
-# -- check file existence --
-
-if [[ -z "$FILE" ]]; then
-    echo "Error: No file provided." >&2
-    exit 1
-fi
-if [[ ! -f "$FILE" ]]; then
-    echo "Error: File '$FILE' not found." >&2
-    exit 1
-fi
-
-# -- extract frontmatter --
+    case "$_arg_value_only" in
+        on|off) ;;
+        *) _PRINT_HELP="yes" die "Internal error: Invalid value for --value-only: '$_arg_value_only'. Allowed values are 'on' or 'off'." 1 ;;
+    esac
+}
 
 extract_frontmatter() {
-    local file="$1"
-    local out
+    local -r _file="$1"
+    local _out
 
-    if $HAS_V4_YQ && out="$(yq --front-matter extract --no-doc "$file" 2>/dev/null)"; then
+    if is_on $_has_v4_yq && _out="$(yq --front-matter extract --no-doc "$_file" 2>/dev/null)"; then
         # Check if the output is a valid YAML mapping
-        if ! printf '%s' "$out" | yq --output-format=yaml 'type =="!!map"' &>/dev/null; then
-            echo "Error: Extracted frontmatter is not a valid YAML mapping in $file" >&2
-            return 3
+        if ! printf '%s' "$_out" | yq --output-format=yaml 'type =="!!map"' &>/dev/null; then
+            printf '%s' "Extracted frontmatter is not a valid YAML mapping in $_file"
+            return 1
         fi
     else
         # Only attempt manual extraction if the file starts with '---' (ignoring leading/trailing spaces and Windows line endings)
-        if head -n 1 "$file" | tr -d '\r' | grep -qE '^[[:space:]]*---[[:space:]]*$'; then
+        if head -n 1 "$_file" | tr -d '\r' | grep -qE '^[[:space:]]*---[[:space:]]*$'; then
             # Start on line 1 to ensure we only capture frontmatter at the top of the file
             # And drop delimiter lines in the result
-            out="$(sed -n '/^1,/^[[:space:]]*---[[:space:]]*$/p' "$file" | sed '1d;$d')"
+            _out="$(sed -n '/^1,/^[[:space:]]*---[[:space:]]*$/p' "$_file" | sed '1d;$d')"
         fi
     fi
 
-    if [[ -z "${out//[[:space:]]/}" ]]; then
-        echo "Error: No valid YAML frontmatter found at the top of $file" >&2
-        return 3
+    if [[ -z "${_out//[[:space:]]/}" ]]; then
+        printf '%s' "No valid YAML frontmatter found at the top of $_file"
+        return 1
     fi
 
-    printf '%s\n' "$out"
-    return 0
+    printf '%s\n' "$_out"
 }
 
-FRONTMATTER="$(extract_frontmatter "$FILE")" || exit $?
-
-# -- process parameters --
-
+# Note: Use a global array to return multiple values from get_parameter functions
+declare -a _param_return_array=()
 get_parameter_with_pick() {
-    local param
-    param="${1:-}"
-    if [[ -z "$param" ]]; then
-        echo "Error: No parameter name provided." >&2
-        return 4
+    local -r _param="${1:?No parameter name provided}"
+    local -r _frontmatter="${2:?No frontmatter provided}"
+
+    local _value
+    if ! _value=$(echo "$_frontmatter" | yq --unwrapScalar --exit-status ".\"$_param\"" 2>/dev/null); then
+        return 1 # Parameter not found
+
+    fi
+    if printf '%s' "$_value" | yq --exit-status 'type == "!!map"' &>/dev/null; then
+        return 2 # Maps are not supported
     fi
 
-    local value
-    if ! value=$(echo "$FRONTMATTER" | yq --unwrapScalar --exit-status ".\"$param\"" 2>/dev/null); then
-        echo "Error: Parameter '$param' not found in frontmatter." >&2
-        echo "Try running without --parameter to see all available parameters." >&2
-        return 4
-    fi
-    if printf '%s' "$value" | yq --exit-status 'type == "!!map"' &>/dev/null; then
-        echo "Error: Parameter '$param' is a nested object. Nested objects are not supported." >&2
-        return 4
-    fi
-
-    if printf '%s' "$value" | yq --exit-status 'type == "!!seq"' &>/dev/null; then
-        # Convert each item to string, then join with commas
-        value="$(printf '%s' "$value" | yq --output-format=json '. | map(tostring) | join(",")')"
+    if printf '%s' "$_value" | yq --exit-status 'type == "!!seq"' &>/dev/null; then
+        # This is an array
+        if is_on "$_arg_print0"; then
+            local -a _items
+            readarray -d '' -t _items < <(printf '%s' "$_value" | yq --unwrapScalar --nul-output '.[]')
+            if [[ ${#_items[@]} -eq 0 ]]; then
+                return 3 # Parameter is an empty array
+            fi
+            _param_return_array+=("${_items[@]}")
+        else
+            # convert each item to string, then join with commas
+            _param_return_array+=("$(printf '%s' "$_value" | yq --output-format=json '. | map(tostring) | join(",")')")
+        fi
     else
-        value="$(printf '%s' "$value" | yq --output-format=json '.')" # JSON ensures strings are quoted and trimmed
+        _value="$(printf '%s' "$_value" | yq --output-format=json '.')"
+        _param_return_array+=("$_value")
     fi
-
-    printf '%s' "$value"
-    return 0
 }
 
 get_parameter_fallback() {
-    local param
-    param="${1:-}"
-    if [[ -z "$param" ]]; then
-        echo "Error: No parameter name provided." >&2
-        return 4
+    local -r _param="${1:?No parameter name provided}"
+    local -r _frontmatter="${2:?No frontmatter provided}"
+
+    local _value
+    if ! _value=$(echo "$_frontmatter" | yq --compact-output --raw-output --exit-status ".\"$_param\"" 2>/dev/null); then
+        return 1
     fi
-    local value
-    if ! value=$(echo "$FRONTMATTER" | yq --compact-output --raw-output --exit-status ".\"$param\"" 2>/dev/null); then
-        echo "Error: Parameter '$param' not found in frontmatter." >&2
-        echo "Try running without --parameter to see all available parameters." >&2
-        return 4
-    fi
-    printf '%s' "$value"
-    return 0
+
+    _param_return_array+=("$_value")
 }
 
-found_parameters=()
-if [[ ${#PARAMETERS[@]} -eq 0 ]]; then
-    # No parameters specified, print all keys
-    printf '%s\n' "$FRONTMATTER" | yq -r "keys | .[]"
-    exit 0
-else
-    # Print specified parameters
-    declare param_value
-    for param in "${PARAMETERS[@]}"; do
-        if $HAS_V4_YQ; then
-            param_value="$(get_parameter_with_pick "$param")" || exit $?
-        else
-            param_value="$(get_parameter_fallback "$param")" || exit $?
-        fi
-        found_parameters+=("$(printf '%s\t%s' "$param" "$param_value")")
-    done
-fi
+get_parameter() {
+    local -r _param="${1:?No parameter name provided}"
+    local -r _frontmatter="${2:?No frontmatter provided}"
 
-# -- output results --
-for entry in "${found_parameters[@]}"; do
-    printf '%s\n' "$entry"
-done
-exit 0
+    local _err
+    if is_on "$_has_v4_yq"; then
+        # Note: don't use command substitution here as it would spawn a subshell and prevent modifying the global array
+        if ! get_parameter_with_pick "$_param" "$_frontmatter"; then
+            return $?
+        fi
+    else
+        # See note above
+        if ! get_parameter_fallback "$_param" "$_frontmatter"; then
+            return $?
+        fi
+    fi
+}
+
+main() {
+    check_dependencies
+    get_yq_version
+    parse_commandline "$@"
+    validate_arguments
+
+    local _frontmatter
+    if ! _frontmatter="$(extract_frontmatter "$_arg_file_path")"; then
+        die "$_frontmatter" 4
+    fi
+
+    local -a _found_parameters=()
+    if is_on "$_print_all_parameters"; then
+        # TODO Error handling if yq fails
+        if is_on "$_arg_print0"; then
+            local -a _keys
+            readarray -d '' -t _keys < <(echo "$_frontmatter" | yq --unwrapScalar --nul-output "keys | .[]")
+            if [[ ${#_keys[@]} -eq 0 ]]; then
+                die "No parameters found in frontmatter." 5
+            fi
+            printf '%s\0' "${_keys[@]}"
+        else
+            printf '%s\n' "$(echo "$_frontmatter" | yq -r "keys | .[]")"
+        fi
+    else
+        # Print specified parameters
+        local _param
+        for _param in "${_arg_parameters[@]}"; do
+            _param_return_array=()
+            if ! get_parameter "$_param" "$_frontmatter"; then
+                local _err=$?
+                case $_err in
+                    0) ;; # No error
+                    1)  die "Parameter '$_param' not found in frontmatter." 5 ;;
+                    2)  die "Parameter '$_param' is a map, which is not supported." 5 ;;
+                    3)  die "Parameter '$_param' is an empty array." 5 ;;
+                    *)  die "Unknown error while retrieving parameter '$_param' (error code $_err)." 99 ;;
+                esac
+            fi
+
+            if [[ ${#_param_return_array[@]} -eq 0 ]]; then
+                die "Failed to get parameter '$_param'" 5
+            fi
+
+            if is_on "$_arg_print0"; then
+                if ! is_on "$_arg_value_only"; then
+                    _found_parameters+=("$_param")
+                fi
+                _found_parameters+=("${_param_return_array[@]}")
+                continue
+            else
+                local _value
+                _value="$(printf '%s\t' "${_param_return_array[@]}")"
+                _value="${_value%$'\t'}" # Remove trailing tab
+                if is_on "$_arg_value_only"; then
+                    _found_parameters+=("$_value")
+                else
+                    _found_parameters+=("$(printf '%s\t%s' "$_param" "$_value")")
+                fi
+            fi
+        done
+    fi
+
+    # -- output results --
+    if is_on "$_arg_print0"; then
+        printf '%s\0' "${_found_parameters[@]}"
+    else
+        printf '%s\n' "${_found_parameters[@]}"
+    fi
+}
+main "$@"
