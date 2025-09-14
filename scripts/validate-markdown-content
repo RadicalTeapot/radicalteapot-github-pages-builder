@@ -181,7 +181,10 @@ resolve_root() {
 
 get_path_relative_to_root() {
     local _file="${1?No file path provided}"
-    _file="${_abs_root_directory#/}/${_file#/}"  # Join with root, ensure no double slashes
+    local -r _make_path_absolute="${2-off}"
+    if is_on "$_make_path_absolute"; then
+        _file="${_abs_root_directory#/}/${_file#/}"  # Join with root, ensure no double slashes
+    fi
     if ! _file="$(realpath "$_file" 2>/dev/null)"; then return 1; fi # Fail if path cannot be resolved
     if [[ "$_file" != "$_abs_root_directory/"* ]]; then return 1; fi # Fail if not under root
     printf '%s' "${_file#"$_abs_root_directory"/}"
@@ -230,7 +233,7 @@ check_links() {
             report_issue "Link '$_link' in file '$_abs_file_path' doesn't start with a slash." 4
             continue
         fi
-        if ! _rel_link="$(get_path_relative_to_root "$_link")"; then
+        if ! _rel_link="$(get_path_relative_to_root "$_link" "on")"; then
             report_issue "Link '$_link' in file '$_abs_file_path' cannot be resolved relative to root '$_abs_root_directory'." 4
             continue
         fi
@@ -279,9 +282,8 @@ check_path_as_alias() {
         done
 
         local _file_path_relative
-        if ! _file_path_relative="$(get_path_relative_to_root "$_abs_file_path")"; then
+        if ! _file_path_relative="$(get_path_relative_to_root "$_abs_file_path" "off")"; then
             report_issue "File path '$_abs_file_path' cannot be resolved relative to root '$_abs_root_directory'." 5
-            return
         fi
 
         local _found=
