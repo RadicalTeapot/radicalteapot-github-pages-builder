@@ -63,14 +63,18 @@ _check_links_relative_to="off"
 _check_path_as_alias="off"
 
 check_dependencies() {
-    command -v extract-links >/dev/null || \
+    if ! command -v extract-links >/dev/null; then
         die "extract-links command not found. Please install it and ensure it's in your PATH." 3
-    command -v frontmatter-parser >/dev/null || \
+    fi
+    if ! command -v frontmatter-parser >/dev/null; then
         die "frontmatter-parser command not found. Please install it and ensure it's in your PATH." 3
-    command -v realpath >/dev/null || \
+    fi
+    if ! command -v realpath >/dev/null; then
         die "realpath command not found. Please install it and ensure it's in your PATH." 3
-    (( BASH_VERSINFO[0] >= 4 )) || \
+    fi
+    if (( BASH_VERSINFO[0] < 4 )); then
         die "Bash version 4 or higher is required. Current version is ${BASH_VERSION}." 3
+    fi
 }
 
 parse_commandline() {
@@ -176,11 +180,10 @@ resolve_root() {
 }
 
 get_path_relative_to_root() {
-    local _file="$1"
-    if [[ "$_file" != /* ]]; then
-        _file="$(realpath "$_abs_root_directory/$_file")" || return 1
-    fi
-    if [[ "$_file" != "$_abs_root_directory/"* ]]; then return 1; fi
+    local _file="${1?No file path provided}"
+    _file="${_abs_root_directory#/}/${_file#/}"  # Join with root, ensure no double slashes
+    if ! _file="$(realpath "$_file" 2>/dev/null)"; then return 1; fi # Fail if path cannot be resolved
+    if [[ "$_file" != "$_abs_root_directory/"* ]]; then return 1; fi # Fail if not under root
     printf '%s' "${_file#"$_abs_root_directory"/}"
 }
 
@@ -196,17 +199,37 @@ report_issue() {
 
 # Check that all links in the markdown file are relative to the specified root directory and point to existing files.
 # Errors:
+#   - Link doesn't start with a slash.
+#   - Link ends with any file extension
 #   - Link cannot be resolved relative to root directory.
 #   - Link points to a non-existent file.
 check_links() {
-    local _links
-    if ! readarray -d '' -t _links < <(extract-links --internal --images --print0 -- "$_abs_file_path" 2>/dev/null); then
+    local -a _file_links=()
+    local -a _image_links=()
+    local -a _links=()
+    if ! readarray -d '' -t _file_links < <(extract-links --internal --print0 -- "$_abs_file_path" 2>/dev/null); then
         report_issue "Failed to extract links from file '$_abs_file_path'." 4
         return
     fi
+    if ! readarray -d '' -t _image_links < <(extract-links --internal --images --print0 -- "$_abs_file_path" 2>/dev/null); then
+        report_issue "Failed to extract image links from file '$_abs_file_path'." 4
+        return
+    fi
+    _links=("${_file_links[@]}" "${_image_links[@]}")
 
-    local _link _rel_link
+    # For file links, check that they don't have a file extension
+    local _link _rel_link _file_link
+    for _file_link in "${_file_links[@]}"; do
+        if [[ $_file_link =~ \.[A-Za-z0-9]{1,8}$ ]]; then
+            report_issue "Link '$_file_link' in file '$_abs_file_path' has a file extension." 4
+        fi
+    done
+
     for _link in "${_links[@]}"; do
+        if [[ "$_link" != /* ]]; then
+            report_issue "Link '$_link' in file '$_abs_file_path' doesn't start with a slash." 4
+            continue
+        fi
         if ! _rel_link="$(get_path_relative_to_root "$_link")"; then
             report_issue "Link '$_link' in file '$_abs_file_path' cannot be resolved relative to root '$_abs_root_directory'." 4
             continue
@@ -224,7 +247,7 @@ check_links() {
 get_alias_candidates() {
     local -r _file_path="$1"
     local -r _base="${_file_path%.*}"  # Remove extension
-    printf '%s0' \
+    printf '%s\0' \
         "$_file_path" "${_file_path#/}" "/${_file_path}" \
         "$_base" "${_base#/}" "/${_base}"
 }
@@ -262,7 +285,7 @@ check_path_as_alias() {
         fi
 
         local _found=
-        local _candidates
+        local -a _candidates
         readarray -d '' -t _candidates < <(get_alias_candidates "$_file_path_relative")
         for _alias in "${_candidates[@]}"; do
             if [[ -n "$_alias" && -n "${_alias_map["$_alias"]+_}" ]]; then
