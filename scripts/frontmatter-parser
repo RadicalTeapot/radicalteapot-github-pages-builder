@@ -92,9 +92,17 @@ parse_commandline() {
             -p|--parameter)
                 shift
                 if [[ -z "${1:-}" ]]; then
-                    _PRINT_HELP="yes" die "--parameter requires a value." 1
+                    _PRINT_HELP="on" die "--parameter requires a value." 1
                 fi
                 _arg_parameters+=("$1")
+                shift
+                ;;
+            --parameter=*)
+                local -r _value="${_key##--parameter=}"
+                if [[ -z "$_value" ]]; then
+                    _PRINT_HELP="on" die "--parameter requires a value." 1
+                fi
+                _arg_parameters+=("$_value")
                 shift
                 ;;
             -h|--help)
@@ -117,7 +125,7 @@ parse_commandline() {
                 done
                 ;;
             -*) # Unknown option
-                _PRINT_HELP="yes" die "Unknown option '$1'." 1
+                _PRINT_HELP="on" die "Unknown option '$1'." 1
                 ;;
             *) # Positional argument
                 _positionals+=("$1")
@@ -127,9 +135,9 @@ parse_commandline() {
     done
 
     if [[ ${#_positionals[@]} -lt 1 ]]; then
-        _PRINT_HELP="yes" die "No input file specified." 1
+        _PRINT_HELP="on" die "No input file specified." 1
     elif [[ ${#_positionals[@]} -gt 1 ]]; then
-        _PRINT_HELP="yes" die "Multiple input files specified. Please provide only one." 1
+        _PRINT_HELP="on" die "Multiple input files specified. Please provide only one." 1
     fi
 
     if [[ ${#_arg_parameters[@]} -eq 0 ]]; then
@@ -142,7 +150,7 @@ parse_commandline() {
 
 validate_arguments() {
     if [[ -z "$_arg_file_path" ]]; then
-        _PRINT_HELP="yes" die "No input file specified." 1
+        _PRINT_HELP="on" die "No input file specified." 1
     fi
     if [[ ! -f "$_arg_file_path" ]]; then
         die "File '$_arg_file_path' not found." 2
@@ -151,11 +159,11 @@ validate_arguments() {
     # Internal errors
     case "$_arg_print0" in
         on|off) ;;
-        *) _PRINT_HELP="yes" die "Internal error: Invalid value for --print0: '$_arg_print0'. Allowed values are 'on' or 'off'." 1 ;;
+        *) die "Internal error: Invalid value for --print0: '$_arg_print0'. Allowed values are 'on' or 'off'." 1 ;;
     esac
     case "$_arg_value_only" in
         on|off) ;;
-        *) _PRINT_HELP="yes" die "Internal error: Invalid value for --value-only: '$_arg_value_only'. Allowed values are 'on' or 'off'." 1 ;;
+        *) die "Internal error: Invalid value for --value-only: '$_arg_value_only'. Allowed values are 'on' or 'off'." 1 ;;
     esac
 }
 

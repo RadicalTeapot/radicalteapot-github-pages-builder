@@ -35,7 +35,7 @@ test_runner() {
 
 test_empty_directory_no_options() {
     local _result
-    _result=$("$_command" "$_test_dir")
+    _result="$("$_command" "$_test_dir")"
 
     if ! assert_success $?; then
         return 1
@@ -52,7 +52,7 @@ test_empty_file_no_options() {
     touch "$_path"
 
     local _result
-    _result=$("$_command" "$_test_dir")
+    _result="$("$_command" "$_test_dir")"
 
     if ! assert_success $?; then
         return 1
