@@ -16,12 +16,14 @@ Open a terminal in the `testing` folder and run `run.ps1` to start a container t
 
 ## To do
 
-- [ ] Replace the `ps1` script with a justfile
-- [ ] Write tests for all scripts
-- [ ] Use `validate-markdown-content` command in other commands (at least `get-files-to-publish` and maybe `extract-links`)
-- [ ] Update `frontmatter-parser` (see TODOs in command code)
+- [x] Write linux version of all `ps1` scripts
+- [x] Write tests for all scripts
+- [ ] Replace the `ps1` and `sh` scripts with a justfile
 - [ ] Add a check stage to justfile to check content of markdown files using `validate-markdown-content` command
-
+- [ ] Use `publish-site` script in justfile to copy files into `site/content` folder
+- [ ] Remove `site/content` from this repo
+- [ ] Test full publish pipeline on a few files from my vault
+- [ ] Auto-push published code to github pages
 
 ## How it works
 
