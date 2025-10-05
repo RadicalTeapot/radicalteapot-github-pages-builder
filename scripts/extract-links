@@ -37,13 +37,15 @@ Examples:
     extract-links --web --print0 ./content/posts/my-post.md
     extract-links --internal --images -- ./content/posts/my-post.md
 
+Dependencies:
+    - Bash 4.3 or higher
+
 Remarks:
     If no filtering options are provided, all links will be extracted.
 
 Error codes:
     1: Invalid command line arguments
     2: Missing or invalid file argument
-    3: No links found matching the specified criteria
 USAGE
 }
 
@@ -55,11 +57,17 @@ _arg_web_images=
 _arg_file=""
 _arg_print0="off"
 
-# TODO: Check those
-_INTERNAL_LINK_REGEX='\[[^][]*\]\(([^()]+)\)(.*$)'
-_WEB_LINK_REGEX='\[[^][]*\]\((https?:\/\/[^()]+)\)(.*$)'
-_INTERNAL_IMAGES_LINK_REGEX='!\[[^][]*\]\(([^()]+)\)(.*$)'
-_WEB_IMAGES_LINK_REGEX='!\[[^][]*\]\((https?:\/\/[^()]+)\)(.*$)'
+_INTERNAL_LINK_REGEX='\[[^][]*\]\([^()]+\)'
+_WEB_LINK_REGEX='\[[^][]*\]\(https?:\/\/[^()]+\)'
+_INTERNAL_IMAGES_LINK_REGEX='!\[[^][]*\]\([^()]+\)'
+_WEB_IMAGES_LINK_REGEX='!\[[^][]*\]\(https?:\/\/[^()]+\)'
+_CAPTURE_GROUP_REGEX='\((.*)\)$'
+
+check_dependencies() {
+    if ! (( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] >= 4 && BASH_VERSINFO[1] >= 3) )); then
+        die "Bash version 4.3 or higher is required. Current version is ${BASH_VERSION}." 3
+    fi
+}
 
 parse_commandline() {
     local _key
@@ -121,69 +129,98 @@ validate_arg_file() {
     if [[ ! -r "$_arg_file" ]]; then die "File '$_arg_file' is not readable." 2; fi
 }
 
-get_regexes() {
-    local _link_regexes=()
+get_internal_links() {
+    local _file="${1:?Missing file argument}"
+    local -n _internal_link_ref="${2:?Missing result array name argument}"
+    local _matching_lines _line
+    _matching_lines=$(grep -oE "$_INTERNAL_LINK_REGEX" "$_file" | grep -Ev "$_WEB_LINK_REGEX" || true)
+    _line=""
+    while IFS= read -r _line; do
+        if [[ "$_line" =~ $_CAPTURE_GROUP_REGEX ]]; then
+            _internal_link_ref+=("${BASH_REMATCH[1]}")
+        fi
+    done < <(printf '%s\n' "$_matching_lines")
+}
 
-    # Determine which link types to extract
-    if [[ "$_arg_internal" == "on" ]]; then
-        _link_regexes+=("$_INTERNAL_LINK_REGEX")
-    fi
-    if [[ "$_arg_web" == "on" ]]; then
-        _link_regexes+=("$_WEB_LINK_REGEX")
-    fi
-    if [[ "$_arg_images" == "on" ]]; then
-        _link_regexes+=("$_INTERNAL_IMAGES_LINK_REGEX")
-    fi
-    if [[ "$_arg_web_images" == "on" ]]; then
-        _link_regexes+=("$_WEB_IMAGES_LINK_REGEX")
-    fi
+get_web_links() {
+    local _file="${1:?Missing file argument}"
+    local -n _web_link_ref="${2:?Missing result array name argument}"
+    local _matching_lines _line
+    _matching_lines=$(grep -oE "$_WEB_LINK_REGEX" "$_file" || true)
+    _line=""
+    while IFS= read -r _line; do
+        if [[ "$_line" =~ $_CAPTURE_GROUP_REGEX ]]; then
+            _web_link_ref+=("${BASH_REMATCH[1]}")
+        fi
+    done < <(printf '%s\n' "$_matching_lines")
+}
 
+get_internal_image_links() {
+    local _file="${1:?Missing file argument}"
+    local -n _internal_image_ref="${2:?Missing result array name argument}"
+    local _matching_lines _line
+    _matching_lines=$(grep -oE "$_INTERNAL_IMAGES_LINK_REGEX" "$_file" | grep -Ev "$_WEB_IMAGES_LINK_REGEX" || true)
+    _line=""
+    while IFS= read -r _line; do
+        if [[ "$_line" =~ $_CAPTURE_GROUP_REGEX ]]; then
+            _internal_image_ref+=("${BASH_REMATCH[1]}")
+        fi
+    done < <(printf '%s\n' "$_matching_lines")
+}
+
+get_web_image_links() {
+    local _file="${1:?Missing file argument}"
+    local -n _web_image_ref="${2:?Missing result array name argument}"
+    local _matching_lines _line
+    _matching_lines=$(grep -oE "$_WEB_IMAGES_LINK_REGEX" "$_file" || true)
+    _line=""
+    while IFS= read -r _line; do
+        if [[ "$_line" =~ $_CAPTURE_GROUP_REGEX ]]; then
+            _web_image_ref+=("${BASH_REMATCH[1]}")
+        fi
+    done < <(printf '%s\n' "$_matching_lines")
+}
+
+get_results() {
+    # Note: name of nameref has to be unique within the function scope
+    local -n _results_ref="${1:?Missing result array name argument}"
+
+    local _get_all="off"
     # If no filters are set, extract all link types
-    if [[ ${#_link_regexes[@]} -eq 0 ]]; then
-        _link_regexes=(
-            "$_INTERNAL_LINK_REGEX"
-            "$_WEB_LINK_REGEX"
-            "$_INTERNAL_IMAGES_LINK_REGEX"
-            "$_WEB_IMAGES_LINK_REGEX"
-        )
+    if ! is_on "$_arg_internal" && ! is_on "$_arg_web" && ! is_on "$_arg_images" && ! is_on "$_arg_web_images"; then
+        _get_all="on"
     fi
 
-    printf '%s\n' "${_link_regexes[@]}"
+    if is_on "$_arg_internal" || is_on "$_get_all"; then
+        get_internal_links "$_arg_file" _results_ref
+    fi
+    if is_on "$_arg_web" || is_on "$_get_all"; then
+        get_web_links "$_arg_file" _results_ref
+    fi
+    if is_on "$_arg_images" || is_on "$_get_all"; then
+        get_internal_image_links "$_arg_file" _results_ref
+    fi
+    if is_on "$_arg_web_images" || is_on "$_get_all"; then
+        get_web_image_links "$_arg_file" _results_ref
+    fi
 }
 
 main() {
-    local -a _link_regexes
-    while IFS= read -r regex; do
-        _link_regexes+=("$regex")
-    done< <(get_regexes)
+    check_dependencies
+    parse_commandline "$@"
+    validate_arg_file
 
-    # Extract and print links based on the selected regexes
-    local _lines=() _matching_lines _line
-    for regex in "${_link_regexes[@]}"; do
-        if _matching_lines=$(grep -oE "$regex" "$_arg_file"); then
-            _line=""
-            while IFS= read -r _line; do
-                while [[ "$_line" =~ $regex ]]; do
-                    _lines+=("${BASH_REMATCH[1]}")
-                    _line="${BASH_REMATCH[2]:-}"
-                done
-            done < <(printf '%s\n' "$_matching_lines")
-        fi
-    done
-    if [[ "${#_lines[@]}" -eq 0 ]]; then
-        die "No links found matching the specified criteria." 3
-    fi
+    local -a _results=()
+    get_results _results
 
-    if [[ "$_arg_print0" == "on" ]]; then
-        printf '%s\0' "${_lines[@]}" | LC_ALL=C sort -uz
+    if [[ "${#_results[@]}" -eq 0 ]]; then
+        printf ''  # Print nothing
     else
-        printf '%s\n' "${_lines[@]}" | LC_ALL=C sort -u
+        if [[ "$_arg_print0" == "on" ]]; then
+            printf '%s\0' "${_results[@]}" | LC_ALL=C sort -uz
+        else
+            printf '%s\n' "${_results[@]}" | LC_ALL=C sort -u
+        fi
     fi
 }
-
-# Validation and parsing
-parse_commandline "$@"
-validate_arg_file
-
-# Run the script
-main
+main "$@"

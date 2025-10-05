@@ -210,6 +210,7 @@ check_links() {
     local -a _file_links=()
     local -a _image_links=()
     local -a _links=()
+
     if ! readarray -d '' -t _file_links < <(extract-links --internal --print0 -- "$_abs_file_path" 2>/dev/null); then
         report_issue "Failed to extract links from file '$_abs_file_path'." 4
         return
