@@ -28,7 +28,7 @@ if ($serverMode -eq $true) {
 
     Write-Host "Building site '$siteName' at '$srcFolder'..."
     Invoke-Expression "podman build -t $SiteName-build --target build ."
-    Invoke-Expression "podman run -it --rm --env=BASE_URL=www.radicalteaport.be.eu.org $volumeMountArgs $siteName-build"
+    Invoke-Expression "podman run -it --rm --env=BASE_URL=www.radicalteapot.be.eu.org $volumeMountArgs $siteName-build"
 
     if (Test-Path $publishFolder) {
         Copy-Item -Recurse -Force .\site\public\* "$publishFolder"
