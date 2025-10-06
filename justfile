@@ -6,17 +6,20 @@ image-name-testing := env('PODMAN_TESTING_IMAGE_NAME', "website-builder-testing"
 image-name-builder := env('PODMAN_HUGO_BUILD_IMAGE_NAME', "website-builder-hugo-build")
 image-name-server := env('PODMAN_HUGO_SERVER_IMAGE_NAME', "website-builder-hugo-server")
 hugo_port := env("HUGO_PORT", "1313")
+base_url := env('BASE_URL', "www.radicalteapot.be.eu.org")
 vault := if env('VAULT_PATH', '') == '' \
     { error("VAULT_PATH not set") } \
     else { shell('realpath "$1"', env('VAULT_PATH')) }
 site_root := absolute_path(env("SITE_ROOT", "site"))
-out := absolute_path(env('OUTPUT_DIR', 'site/content'))
+site_content := absolute_path(env('SITE_CONTENT', 'site/content'))
+publish_dir := absolute_path(env('PUBLISH_DIR', 'publish'))
 
 copy-from-vault: _build-base-image
+    mkdir -p "{{site_content}}"
     podman run \
         --rm \
         --volume "{{vault}}:/vault:ro" \
-        --volume "{{out}}:/publish:Z" \
+        --volume "{{site_content}}:/publish:Z" \
         {{image-name-base}} \
         bash publish-site /vault /publish
 
@@ -28,12 +31,21 @@ serve: _build-server-image
         {{image-name-server}} \
         hugo server --bind=0.0.0.0 --poll 750ms
 
+build-site: _build-builder-image
+    podman run \
+        --rm \
+        --env=BASE_URL={{base_url}}
+        --volume "{{site_root}}:/site:Z" \
+        {{image-name-builder}}
+    mkdir -p "{{publish_dir}}"
+    cp "{{site_root}}/public/*" "{{publish_dir}}"
+
 # publish: copy-from-vault build-site push-to-github
 
 clean:
-    # Clean podman image
-    # Clean output directory
-    rm -rf {{out}}
+    # Clean podman images
+    rm -rf "{{site_content}}/*"
+    rm -rf "{{publish_dir}}/*"
 
 test-extract-links: (test "extract-links")
 test-frontmatter-parser: (test "frontmatter-parser")
@@ -56,7 +68,11 @@ _build-base-image: && (_build-image "base" image-name-base)
 _build-test-image: && (_build-image "testing" image-name-testing)
     echo "Building test image..."
 
-_build-server-image: (_build-image "server" image-name-server)
+_build-server-image: && (_build-image "server" image-name-server)
+    echo "Building server image..."
+
+_build-builder-image: && (_build-image "build" image-name-builder)
+    echo "Building image..."
 
 _build-image TARGET TAG:
     podman build --target {{TARGET}} --tag {{TAG}} . > /dev/null 2>&1
