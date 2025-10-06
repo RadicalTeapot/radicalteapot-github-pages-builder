@@ -1,3 +1,5 @@
 .hugo_build.lock
 site/public
+site/content
 PowerShellEditorServices.json
+.env

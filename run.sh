@@ -1,4 +1,4 @@
-#/usr/bin/env bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -97,8 +97,9 @@ parse_commandline() {
                 ;;
             --)
                 shift
-                while [[ $# -gt 0 ]];do
+                while [[ $# -gt 0 ]]; do
                     _positionals+=("$1")
+                    shift
                 done
                 ;;
             -*)
@@ -106,16 +107,17 @@ parse_commandline() {
                 ;;
             *)
                 _positionals+=("$1")
+                shift
                 ;;
         esac
-
-        if [[ "${#_positionals[@]}" -lt 1 ]]; then
-            _PRINT_HELP="on" die "No site folder provided" 1
-        elif [[ "${#_positionals[@]}" -gt 1 ]]; then
-            _PRINT_HELP="on" die "Mulitple site folder provided, expected only one." 1
-        fi
-        _arg_src_folder="${_positionals[0]}"
     done
+
+    if [[ "${#_positionals[@]}" -lt 1 ]]; then
+        _PRINT_HELP="on" die "No site folder provided" 1
+    elif [[ "${#_positionals[@]}" -gt 1 ]]; then
+        _PRINT_HELP="on" die "Mulitple site folder provided, expected only one." 1
+    fi
+    _arg_src_folder="${_positionals[0]}"
 }
 
 validate-arguments() {
@@ -140,14 +142,15 @@ main() {
         _image_name="${_arg_site_name}-server"
         _target="server"
     fi
-    local -r _volume_mount_arg="-v \"${_abs_src_folder}:/site:Z\""
+    local -r _volume_mount_arg="${_abs_src_folder}:/site:Z"
     log "Building ..."
-    podman build --target "$_target" -t "$_image_name" .
+    podman build --target "$_target" -t "$_image_name" . > /dev/null 2>&1
 
     if is_on "$_arg_server_mode"; then
-        podman run -it --rm -p 1313:1313 "$_volume_mount_arg" "$_image_name"
+        podman run --interactive --tty --rm -p 1313:1313 --volume "$_volume_mount_arg" "$_image_name"
     else
-        podman run -it --rm --env=BASE_URL=www.radicalteapot.be.eu.org "$_volume_mount_arg" "$_image_name"
+        log "Publishing ${_arg_site_name}..."
+        podman run --rm --env=BASE_URL=www.radicalteapot.be.eu.org --volume "$_volume_mount_arg" "$_image_name"
     fi
 
     # TODO Copy to publish folder if it exists

@@ -16,3 +16,7 @@ printf '%s\n' "=== extract-links done ===" >&2
 printf '\n%s' '=== Running validate-markdown-content tests ===' >&2
 ./validate-markdown-content_command/test.sh
 printf '%s\n' '=== validate-markdown-content done ===' >&2
+
+printf '\n%s' '=== Running publish-site tests ===' >&2
+./publish-site_command/test.sh
+printf '%s\n' '=== publish-site done ===' >&2
