@@ -34,7 +34,7 @@ serve: _build-server-image
 build-site: _build-builder-image
     podman run \
         --rm \
-        --env=BASE_URL={{base_url}}
+        --env=BASE_URL={{base_url}} \
         --volume "{{site_root}}:/site:Z" \
         {{image-name-builder}}
     mkdir -p "{{publish_dir}}"

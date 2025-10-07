@@ -21,7 +21,7 @@ Open a terminal in the `testing` folder and run `run.ps1` to start a container t
 - [x] Replace the `ps1` and `sh` scripts with a justfile
 - [x] Use `publish-site` script in justfile to copy files into `site/content` folder
 - [x] Remove `site/content` from this repo
-- [ ] Test justfile on Windows and remove `ps1` scripts if all works
+- [x] Test justfile on Windows and remove `ps1` scripts if all works
 - [ ] Document environment variables used by justfile
 - [ ] Update Setup and Testing section of this readme file
 - [ ] Write tests for `publish-site` command
