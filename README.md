@@ -44,11 +44,12 @@ The following commands are available to run the tests:
 
 ## To do
 
-- [ ] Write tests for `publish-site` command
-- [ ] Add a check stage to justfile to check content of markdown files using
-  `validate-markdown-content` command
-- [ ] Test full publish pipeline on a few files from my vault
+- [ ] Fix printing when `just copy-from-vault` is run
+- [ ] Rethink vault structure to fix issue with list pages
+- [ ] Speed up `publish-site`
 - [ ] Auto-push published code to github pages
+- [ ] Adapt `validate-markdown-content` so it can be used to lint files in neovim
+- [ ] Auto publish on save in neovim
 
 ## How it works
 
