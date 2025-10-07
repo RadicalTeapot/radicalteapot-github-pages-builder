@@ -13,17 +13,18 @@ vault := if env('VAULT_PATH', '') == '' \
 site_root := absolute_path(env("SITE_ROOT", "site"))
 site_content := absolute_path(env('SITE_CONTENT', 'site/content'))
 publish_dir := absolute_path(env('PUBLISH_DIR', 'publish'))
+base_site_markdown_content_dir := absolute_path(env('BASE_MD_CONTENT_DIR', 'site/base-markdown-content'))
 
 copy-from-vault: _build-base-image
     mkdir -p "{{site_content}}"
     podman run \
         --rm \
-        --volume "{{vault}}:/vault:ro" \
+        --volume "{{vault}}:/vault:ro,Z" \
         --volume "{{site_content}}:/publish:Z" \
         {{image-name-base}} \
         bash publish-site /vault /publish
 
-serve: _build-server-image
+serve: _build-server-image _copy_site_markdown_files
     podman run \
         --interactive --tty --rm \
         --publish {{hugo_port}}:{{hugo_port}} \
@@ -31,7 +32,7 @@ serve: _build-server-image
         {{image-name-server}} \
         hugo server --bind=0.0.0.0 --poll 750ms
 
-build: _build-builder-image
+build: _build-builder-image _copy_site_markdown_files
     podman run \
         --rm \
         --env=BASE_URL={{base_url}} \
@@ -43,9 +44,10 @@ build: _build-builder-image
 # publish: copy-from-vault build-site push-to-github
 
 clean:
-    # Clean podman images
+    # TODO Clean podman images
     rm -rf "{{site_content}}/*"
     rm -rf "{{publish_dir}}/*"
+    rm -rf "{{site_root}}/public"
 
 test-extract-links: (_test_command "extract-links")
 test-frontmatter-parser: (_test_command "frontmatter-parser")
@@ -77,3 +79,7 @@ _build-builder-image: && (_build-image "build" image-name-builder)
 
 _build-image TARGET TAG:
     podman build --target {{TARGET}} --tag {{TAG}} . > /dev/null 2>&1
+
+_copy_site_markdown_files:
+    mkdir -p "{{site_content}}"
+    cp -r {{base_site_markdown_content_dir}}/* {{site_content}}

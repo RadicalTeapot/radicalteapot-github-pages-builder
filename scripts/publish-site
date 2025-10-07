@@ -56,8 +56,6 @@ _arg_output_directory=""
 _src=""
 _out=""
 
-_default_publish_args=(--only-published --missing-alias "warn")
-
 check_dependencies() {
     command -v get-files-to-publish &>/dev/null || \
         die "get-files-to-publish command not found. Please install it and ensure it's in your PATH." 5
@@ -253,7 +251,7 @@ get_files_and_images_to_copy() {
     local -n _files_to_copy_ref="${1?Internal error: Missing argument to get_files_and_images_to_copy()}"
 
     local -a _files_to_publish=()
-    if ! readarray -d '' -t _files_to_publish < <(get-files-to-publish --print0 "${_default_publish_args[@]}" "$_src" 2>/dev/null); then
+    if ! readarray -d '' -t _files_to_publish < <(get-files-to-publish --print0 --only-published --missing-alias "warn" "$_src"); then
         die "Failed to get files to publish." 4
     fi
 
@@ -266,7 +264,7 @@ get_files_and_images_to_copy() {
     local -a _images_to_publish=()
     for _file in "${_files_to_publish[@]}"; do
         local -a _imgs=()
-        if ! readarray -d '' -t _imgs < <(extract-links --images --print0 "$_file" 2>/dev/null); then
+        if ! readarray -d '' -t _imgs < <(extract-links --images --print0 "$_file"); then
             die "Failed to extract image links from file '$_file'." 4
         fi
         if [[ "${#_imgs[@]}" -gt 0 ]]; then
@@ -293,7 +291,7 @@ check_dead_links() {
         local -a _internal_links=()
         local _abs_file="$_src/$_file"
         readarray -d '' -t _internal_links < <(extract-links --internal --images --print0 "$_abs_file" || true)
-        get_clean_relative_path_list _internal_links "no" "${_internal_links[@]}" 2>/dev/null || true
+        get_clean_relative_path_list _internal_links "no" "${_internal_links[@]}" || true
 
         local _link _target_src
         for _link in "${_internal_links[@]}"; do

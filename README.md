@@ -40,6 +40,7 @@ The following commands are available to run the tests:
 - `SITE_ROOT`: Path to the root of the hugo website inside the container relative to the repository root folder (default: `site`)
 - `SITE_CONTENT`: Path to the content folder of the hugo website inside the container relative to the repository root folder (default: `site/content`)
 - `PUBLISH_DIR`: Path to the folder where the generated website should be copied when publishing relative to the repository root folder (default: `publish`)
+- `BASE_MD_CONTENT_DIR`: Path to the folder where markdown files used by the website but not in my vault are located, relative to the repository root (default: `site/base-markdown-content`)
 
 ## To do
 

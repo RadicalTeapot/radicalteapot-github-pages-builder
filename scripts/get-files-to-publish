@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+log()   { printf '%s\n' "$*" >&2; }
 error() { printf '[ERROR] %s\n' "$*" >&2; }
 is_on() { [[ "$1" == "on" ]]; }
 
@@ -43,6 +44,7 @@ Error codes:
     3: Required command not found (realpath, find, readarray, sed)
     4: Invalid or missing directory argument
     5: Missing or invalid aliases in front-matter
+    6: No markdown files
     99: Unexpected error
 
 Implementation notes:
@@ -168,16 +170,19 @@ should_be_published() {
     local -r _file="${1?Missing file argument}"
     if ! is_on "$_arg_only_published"; then
         return 0
-    elif _value=$(frontmatter-parser "$_file" --parameter "publish" 2>/dev/null); then
-        [[ "${_value#*[$'\t']}" == "true" ]] && return 0
+    elif _value=$(frontmatter-parser "$_file" --parameter "publish" --value-only); then
+        if [[ "$_value" == "true" ]]; then
+            return 0
+        fi
     fi
     return 1
 }
 
 get_aliases() {
+    # TODO Refactor this with new arguments (--value-only and --print0 from frontmatter-parser)
     local -r _file="${1?Missing file argument}"
     local _aliases
-    _aliases=$(frontmatter-parser "$_file" --parameter "aliases" 2>/dev/null) || return 1
+    _aliases=$(frontmatter-parser "$_file" --parameter "aliases") || return 1
     _aliases=${_aliases#*$'\t'}                          # drop leading key/sep if present
     _aliases=${_aliases//\"/}                            # drop quotes
     tr ',' '\n' <<<"$_aliases" | sed '/^[[:space:]]*$/d' # Replace commas with newlines and remove empty lines
@@ -187,60 +192,64 @@ check_valid_aliases() {
     local -r _file="${1?Missing file argument}"
     local _slug _url _aliases _aliases_array _relative_file_path
 
+    # Skip if not checking for alias
     if [[ "$_arg_missing_alias" == "ignore" ]]; then
         return 0
     fi
 
-    _slug=$(frontmatter-parser "$_file" --parameter "slug" 2>/dev/null || echo "")
-    _url=$(frontmatter-parser "$_file" --parameter "url" 2>/dev/null || echo "")
+    _slug=$(frontmatter-parser "$_file" --parameter "slug" --value-only || echo "")
+    _url=$(frontmatter-parser "$_file" --parameter "url" --value-only || echo "")
 
-    if [[ -n "$_slug" || -n "$_url" ]]; then
-        if ! _aliases=$(get_aliases "$_file"); then
-            case "$_arg_missing_alias" in
-            warn)
-                echo "Warning: File '$_file' has 'slug' or 'url' set but no 'aliases' option." >&2
-                return 0
-                ;;
-            skip-file)
-                echo "Skipping file '$_file' because it has 'slug' or 'url' set but no 'aliases' option." >&2
-                return 1
-                ;;
-            error)
-                die "Error: File '$_file' has 'slug' or 'url' set but no 'aliases' option." 5
-                ;;
-            esac
+    # Skip if no slug or url
+    if [[ -z "$_slug" && -z "$_url" ]]; then
+        return 0
+    fi
+
+    if ! _aliases=$(get_aliases "$_file"); then
+        case "$_arg_missing_alias" in
+        warn)
+            echo "Warning: File '$_file' has 'slug' or 'url' set but no 'aliases' option." >&2
+            return 0
+            ;;
+        skip-file)
+            echo "Skipping file '$_file' because it has 'slug' or 'url' set but no 'aliases' option." >&2
+            return 1
+            ;;
+        error)
+            die "Error: File '$_file' has 'slug' or 'url' set but no 'aliases' option." 5
+            ;;
+        esac
+    fi
+
+    # Check if file is in aliases
+    _relative_file_path="${_file#"$_arg_directory"}"
+    for ext in "${_markdown_extensions[@]}"; do
+        if [[ "$_relative_file_path" == *.$ext ]]; then
+            _relative_file_path="${_relative_file_path%."$ext"}"
+            break
         fi
-
-        # Check if file is in aliases
-        _relative_file_path="${_file#"$_arg_directory"}"
-        for ext in "${_markdown_extensions[@]}"; do
-            if [[ "$_relative_file_path" == *.$ext ]]; then
-                _relative_file_path="${_relative_file_path%."$ext"}"
-                break
-            fi
-        done
-        local _found_alias="false"
-        while IFS= read -r _alias; do
-            if [[ "$_alias" == "$_relative_file_path" ]]; then
-                _found_alias="true"
-                break
-            fi
-        done <<<"$_aliases"
-
-        if [[ "$_found_alias" == "false" ]]; then
-            case "$_arg_missing_alias" in
-            warn)
-                echo "Warning: File '$_file' has 'slug' or 'url' set but its filename '$_relative_file_path' is not in 'aliases'." >&2
-                ;;
-            skip-file)
-                echo "Skipping file '$_file' because it has 'slug' or 'url' set but its filename '$_relative_file_path' is not in 'aliases'." >&2
-                return 1
-                ;;
-            error)
-                die "Error: File '$_file' has 'slug' or 'url' set but its filename '$_relative_file_path' is not in 'aliases'." 5
-                ;;
-            esac
+    done
+    local _found_alias="false"
+    while IFS= read -r _alias; do
+        if [[ "$_alias" == "$_relative_file_path" ]]; then
+            _found_alias="true"
+            break
         fi
+    done <<<"$_aliases"
+
+    if [[ "$_found_alias" == "false" ]]; then
+        case "$_arg_missing_alias" in
+        warn)
+            echo "Warning: File '$_file' has 'slug' or 'url' set but its filename '$_relative_file_path' is not in 'aliases'." >&2
+            ;;
+        skip-file)
+            echo "Skipping file '$_file' because it has 'slug' or 'url' set but its filename '$_relative_file_path' is not in 'aliases'." >&2
+            return 1
+            ;;
+        error)
+            die "Error: File '$_file' has 'slug' or 'url' set but its filename '$_relative_file_path' is not in 'aliases'." 5
+            ;;
+        esac
     fi
 }
 
@@ -252,14 +261,19 @@ main() {
 
     # Find all markdown files in the specified directory (support multiple extensions)
     local -a _md_files=()
-    local -a _tmp_arr=()
     local _ext
     for _ext in "${_markdown_extensions[@]}"; do
-        readarray -t _tmp_arr < <(find "$_arg_directory" -type f -name "*.$_ext" -print0)
+        local -a _tmp_arr=()
+        readarray -d '' -t _tmp_arr < <(find "$_arg_directory" -type f -name "*.$_ext" -print0)
         _md_files+=("${_tmp_arr[@]}")
     done
 
+    if [[ "${#_md_files[@]}" -eq 0 ]]; then
+        die "No markdown files found in $_arg_directory" 6
+    fi
+
     local -a _files_to_publish=()
+    local _file
     for _file in "${_md_files[@]}"; do
         if should_be_published "$_file" && check_valid_aliases "$_file"; then
             _files_to_publish+=("$(realpath "$_file")")

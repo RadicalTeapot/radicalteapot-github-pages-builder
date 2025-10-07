@@ -211,11 +211,11 @@ check_links() {
     local -a _image_links=()
     local -a _links=()
 
-    if ! readarray -d '' -t _file_links < <(extract-links --internal --print0 -- "$_abs_file_path" 2>/dev/null); then
+    if ! readarray -d '' -t _file_links < <(extract-links --internal --print0 -- "$_abs_file_path"); then
         report_issue "Failed to extract links from file '$_abs_file_path'." 4
         return
     fi
-    if ! readarray -d '' -t _image_links < <(extract-links --internal --images --print0 -- "$_abs_file_path" 2>/dev/null); then
+    if ! readarray -d '' -t _image_links < <(extract-links --internal --images --print0 -- "$_abs_file_path"); then
         report_issue "Failed to extract image links from file '$_abs_file_path'." 4
         return
     fi
@@ -265,12 +265,12 @@ get_alias_candidates() {
 check_path_as_alias() {
     local _slug
     local _url
-    _slug="$(frontmatter-parser --parameter slug -- "$_abs_file_path" 2>/dev/null || printf '')"
-    _url="$(frontmatter-parser --parameter url -- "$_abs_file_path" 2>/dev/null || printf '')"
+    _slug="$(frontmatter-parser --parameter slug -- "$_abs_file_path" || printf '')"
+    _url="$(frontmatter-parser --parameter url -- "$_abs_file_path" || printf '')"
 
     if [[ -n "$_slug" || -n "$_url" ]]; then
         local -a _aliases
-        readarray -d '' -t _aliases < <(frontmatter-parser --parameter aliases --print0 -- "$_abs_file_path" 2>/dev/null || printf '')
+        readarray -d '' -t _aliases < <(frontmatter-parser --parameter aliases --print0 -- "$_abs_file_path" || printf '')
         if [[ ${#_aliases[@]} -eq 0 ]]; then
             report_issue "File '$_abs_file_path' has 'slug' or 'url' set but no 'aliases' option." 5
             return
