@@ -4,6 +4,7 @@ set -eEuo pipefail
 log()  { printf '%s\n' "$*" >&2; }
 log_warn()  { printf '[WARN]  %s\n' "$*" >&2; }
 log_error() { printf '[ERROR] %s\n' "$*" >&2; }
+is_on() { [[ "$1" == "on" ]]; }
 
 die() {
     local _ret="${2:-1}"
@@ -35,7 +36,7 @@ Dependencies:
     - extract-links
     - rsync
     - realpath
-    - Bash version 4 or higher
+    - Bash version 4.3 or higher
 
 Error codes:
     1: Invalid command line arguments
@@ -66,8 +67,8 @@ check_dependencies() {
         die "rsync command not found. Please install it and ensure it's in your PATH." 5
     command -v realpath &>/dev/null || \
         die "realpath command not found. Please install it and ensure it's in your PATH." 5
-    if (( BASH_VERSINFO[0] < 4 )); then
-        die "Bash version 4 or higher is required. Current version is ${BASH_VERSION}." 5
+    if ! (( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] >= 4 && BASH_VERSINFO[1] >= 3) )); then
+        die "Bash version 4.3 or higher is required. Current version is ${BASH_VERSION}." 5
     fi
 }
 
@@ -107,22 +108,18 @@ parse_commandline() {
     done
 
     _positionals_count="${#_positionals[@]}"
+    if [[ "${_positionals_count}" -lt 2 ]]; then
+        die "Not enough positional arguments: expected 2, got ${_positionals_count}" 1
+    fi
     if [[ "${_positionals_count}" -gt 2 ]]; then
         die "Too many positional arguments: expected at most 2, got ${_positionals_count}" 1
     fi
-    if [[ "${_positionals_count}" -ge 1 ]]; then
-        _arg_source_directory="${_positionals[0]}"
-    fi
-    if [[ "${_positionals_count}" -ge 2 ]]; then
-        _arg_output_directory="${_positionals[1]}"
-    fi
+
+    _arg_source_directory="${_positionals[0]}"
+    _arg_output_directory="${_positionals[1]}"
 }
 
 validate_arguments() {
-    if [[ "$_arg_clean" != "on" && "$_arg_clean" != "off" ]]; then
-        die "Invalid value for --clean: '$_arg_clean'. Expected 'on' or 'off'." 1
-    fi
-
     if [[ -z "$_arg_source_directory" || -z "$_arg_output_directory" ]]; then
         die "Both source and output directories must be specified." 2
     fi
@@ -130,6 +127,21 @@ validate_arguments() {
     if [[ ! -d "$_arg_source_directory" ]]; then
         die "Source directory '$_arg_source_directory' does not exist or is not a directory." 2
     fi
+
+    if [[ ! -d "$_arg_output_directory" ]]; then
+        mkdir -p -- "$_arg_output_directory" || die "Output directory '$_arg_output_directory' does not exist and cannot be created." 2
+    fi
+
+    # Internal checks
+    case "$_arg_clean" in
+        on | off) ;;
+        *) die "Internal error: Invalid value for --clean: '$_arg_clean'. Allowed values are 'on' or 'off'." 1 ;;
+    esac
+
+    case "$_arg_yes" in
+        on | off) ;;
+        *) die "Internal error: Invalid value for --yes: '$_arg_yes'. Allowed values are 'on' or 'off'." 1 ;;
+    esac
 }
 
 resolve_directories() {
@@ -139,7 +151,7 @@ resolve_directories() {
 
 # -- publish site --
 clean_output_directory() {
-    if [[ "$_arg_clean" != "on" ]]; then
+    if ! is_on "$_arg_clean"; then
         return 0
     fi
 
@@ -192,16 +204,23 @@ clean_output_directory() {
 }
 
 # Convert absolute paths to relative paths based on source directory
-# Arguments: list of file paths (absolute or source-relative)
-# Outputs: NUL-separated list of relative paths
+# Arguments:
+#   - array to fill with relative file paths
+#   - list of file paths (absolute or source-relative)
 # Note: this assumes file paths are either source-relative or absolute, empty paths are ignored, duplicates are removed
 # Exits with error if a file is outside the source directory
 get_clean_relative_path_list() {
-    local -a _relative_files
+    local -n _relative_files_ref="${1:?Internal error: Missing argument to get_clean_relative_path_list()}"
+    shift
+    local _fail_on_invalid="${1:-off}"
+    shift
+
     local -A _seen=()
     local _file _relative
     for _file in "$@"; do
-        [[ -z "$_file" ]] && continue # skip empty
+        if [[ -z "$_file" ]]; then
+            continue # skip empty
+        fi
 
         if [[ "$_file" != /* ]]; then
             _file="$(realpath "$_src/${_file#./}")" || continue
@@ -210,7 +229,7 @@ get_clean_relative_path_list() {
         fi
 
         if [[ "$_file" != "$_src/"* ]]; then
-            if [[ ${_FAIL_ON_INVALID:-no} == "yes" ]]; then
+            if is_on "${_FAIL_ON_INVALID:-off}"; then
                 die "Found invalid file path '$_file' (outside source directory)." 4
             fi
             log_warn "Skipping file '$_file' outside source directory."
@@ -218,41 +237,43 @@ get_clean_relative_path_list() {
         fi
         _relative="${_file#"$_src"/}" # make relative to source
 
-        [[ -n "${_seen["$_relative"]+_}" ]] && continue # skip duplicates
-        _seen["$_relative"]=1
+        if [[ -n "${_seen["$_relative"]+_}" ]]; then
+            continue # skip duplicates
+        fi
 
-        _relative_files+=("$_relative")
+        _seen["$_relative"]=1
+        _relative_files_ref+=("$_relative")
     done
-    printf '%s\0' "${_relative_files[@]}"
 }
 
 # Get list of files to copy, including images linked in the files
-# Outputs: NUL-separated list of file paths relative to source directory
+# Arguments: array to fill with file paths (relative to source directory)
 # Exits with error if a file is outside the source directory
 get_files_and_images_to_copy() {
-    local -a _files_to_copy=()
-    local _files
-    if ! _files=$(get-files-to-publish "${_default_publish_args[@]}" "$_src"); then
+    local -n _files_to_copy_ref="${1?Internal error: Missing argument to get_files_and_images_to_copy()}"
+
+    local -a _files_to_publish=()
+    if ! readarray -d '' -t _files_to_publish < <(get-files-to-publish --print0 "${_default_publish_args[@]}" "$_src" 2>/dev/null); then
         die "Failed to get files to publish." 4
     fi
-    readarray -d '' -t _files_to_copy <<<"$_files"
-    readarray -d '' -t _files_to_copy < <(_FAIL_ON_INVALID=yes get_clean_relative_path_list "${_files_to_copy[@]}")
 
-    local -a _images_to_copy=()
-    for _file in "${_files_to_copy[@]}"; do
+    if [[ "${#_files_to_publish[@]}" -eq 0 ]]; then
+        return 0
+    fi
+
+    get_clean_relative_path_list _files_to_copy_ref "on" "${_files_to_publish[@]}"
+
+    local -a _images_to_publish=()
+    for _file in "${_files_to_publish[@]}"; do
         local -a _imgs=()
-        readarray -d '' -t _imgs < <(extract-links --images --print0 "$_file" || true)
-        _images_to_copy+=("${_imgs[@]}")
+        if ! readarray -d '' -t _imgs < <(extract-links --images --print0 "$_file" 2>/dev/null); then
+            die "Failed to extract image links from file '$_file'." 4
+        fi
+        if [[ "${#_imgs[@]}" -gt 0 ]]; then
+            _images_to_publish+=("${_imgs[@]}")
+        fi
     done
-    readarray -d '' -t _images_to_copy < <(_FAIL_ON_INVALID=yes get_clean_relative_path_list "${_images_to_copy[@]}")
-
-    # Merge image files into main file list
-    local _img
-    for _img in "${_images_to_copy[@]}"; do
-        _files_to_copy+=("$_img")
-    done
-
-    printf '%s\0' "${_files_to_copy[@]}"
+    get_clean_relative_path_list _files_to_copy_ref "on" "${_images_to_publish[@]}"
 }
 
 # Check for dead internal links in the files to be published
@@ -270,8 +291,9 @@ check_dead_links() {
     local _file
     for _file in "${_files_to_copy[@]}"; do
         local -a _internal_links=()
-        readarray -d '' -t _internal_links < <(extract-links --internal --images --print0 "$_file" || true)
-        readarray -d '' -t _internal_links < <(_FAIL_ON_INVALID=no get_clean_relative_path_list "${_internal_links[@]}" 2>/dev/null || true)
+        local _abs_file="$_src/$_file"
+        readarray -d '' -t _internal_links < <(extract-links --internal --images --print0 "$_abs_file" || true)
+        get_clean_relative_path_list _internal_links "no" "${_internal_links[@]}" 2>/dev/null || true
 
         local _link _target_src
         for _link in "${_internal_links[@]}"; do
@@ -288,14 +310,16 @@ copy_files() {
     # Build NUL-separated list file for rsync
     local _list_file
     _list_file=$(mktemp) || die "Failed to create temporary file." 4
-    trap 'rm -f -- "$_list_file"' EXIT
+    trap 'rm -f -- '"$_list_file" EXIT
+
     {
         printf '%s\0' "${_relative_files[@]}"
     } > "$_list_file"
 
     log "Copying ${#_relative_files[@]} files to '$_out' with rsync..."
-    rsync -a --files-from="$_list_file" --from0 "$_src"/ "$_out"/ \
-        || die "Failed to copy files to '$_out'." 4
+    if ! rsync -a --files-from="$_list_file" --from0 "$_src"/ "$_out"/; then
+        die "Failed to copy files to '$_out'." 4
+    fi
 }
 
 main() {
@@ -306,7 +330,7 @@ main() {
     clean_output_directory
 
     local -a _files_to_copy=()
-    readarray -d '' -t _files_to_copy < <(get_files_and_images_to_copy)
+    get_files_and_images_to_copy _files_to_copy
 
     if [[ "${#_files_to_copy[@]}" -eq 0 ]]; then
         log "No files to publish."

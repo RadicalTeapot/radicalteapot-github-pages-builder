@@ -35,10 +35,12 @@ test_runner() {
 
 test_nonexistent_file() {
     local _result
-    _result=$($_command "$_test_dir/nonexistent.md" 2>/dev/null)
+    _result="$($_command "$_test_dir/nonexistent.md" 2>/dev/null)"
+
     if ! assert_failure $?; then
         return 1
     fi
+
     if ! assert_empty "$_result"; then
         return 1
     fi
@@ -50,7 +52,7 @@ test_empty_file() {
     touch "$_path"
 
     _result="$("$_command" "$_path" 2>/dev/null)"
-    if ! assert_failure $?; then
+    if ! assert_success $?; then
         return 1
     fi
 

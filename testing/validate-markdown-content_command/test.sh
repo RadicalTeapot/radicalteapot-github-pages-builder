@@ -34,7 +34,7 @@ test_runner() {
 }
 
 invalid_file_path() {
-    "$("$_command" "$_test_dir/nonexistent.md" 2>&1)"
+    "$_command" "$_test_dir/nonexistent.md" 2>/dev/null
 
     if ! assert_failure $?; then
         return 1
@@ -63,7 +63,7 @@ links_with_no_root() {
 This is a valid markdown file with a [relative link]($_test_dir/somefile.md).
 EOF
 
-    "$("$_command" --has-links-relative-to "$_file_path" 2>&1)"
+    "$_command" --has-links-relative-to "$_file_path" 2>/dev/null
 
     if ! assert_failure $?; then
         return 1
@@ -96,13 +96,17 @@ EOF
     local _root_dir="$_test_dir"
 
     local _result
-    _result="$("$_command" --has-links-relative-to "$_file_path" "$_root_dir")"
+    _result="$("$_command" --has-links-relative-to "$_file_path" "$_root_dir" 2>&1)"
 
     if ! assert_success $?; then
         return 1
     fi
 
-    if assert_empty "$_result" && grep -i "start with a slash" <<<"$_result" >/dev/null; then
+    if ! assert_not_empty "$_result"; then
+        return 1
+    fi
+
+    if ! grep -i "start with a slash" <<<"$_result" >/dev/null; then
         return 1
     fi
 }
@@ -116,8 +120,8 @@ This is a valid markdown file with a [relative link]($_link_path).
 EOF
     local _root_dir="$_test_dir"
 
-    local _result
-    _result="$("$_command" --has-links-relative-to --strict "$_file_path" "$_root_dir" 2>&1)"
+    "$_command" --has-links-relative-to --strict "$_file_path" "$_root_dir" 2>/dev/null
+
     if ! assert_failure $?; then
         return 1
     fi
@@ -139,7 +143,7 @@ EOF
         return 1
     fi
 
-    if assert_empty "$_result" && grep -i "not relative" <<<"$_result" >/dev/null; then
+    if ! assert_not_empty "$_result" || grep -i "not relative" <<<"$_result" >/dev/null; then
         return 1
     fi
 }
@@ -160,7 +164,7 @@ EOF
         return 1
     fi
 
-    if assert_empty "$_result" && grep -i "not relative" <<<"$_result" >/dev/null; then
+    if ! assert_not_empty "$_result" || grep -i "not relative" <<<"$_result" >/dev/null; then
         return 1
     fi
 }
@@ -174,8 +178,7 @@ This is a valid markdown file with a [relative link](/test/somefile.md).
 EOF
     local _root_dir="$_test_dir"
 
-    local _result
-    _result="$("$_command" --has-links-relative-to --strict "$_file_path" "$_root_dir" 2>&1)"
+    "$_command" --has-links-relative-to --strict "$_file_path" "$_root_dir" 2>/dev/null
 
     if ! assert_failure $?; then
         return 1
@@ -191,8 +194,7 @@ relative_link_outside_root_strict() {
 EOF
     local _root_dir="$_test_dir"
 
-    local _result
-    _result="$("$_command" --has-links-relative-to --strict "$_file_path" "$_root_dir" 2>&1)"
+    "$_command" --has-links-relative-to --strict "$_file_path" "$_root_dir" 2>/dev/null
 
     if ! assert_failure $?; then
         return 1
@@ -210,8 +212,7 @@ This is a valid markdown file.
 EOF
     local _root_dir="$_test_dir"
 
-    local _result
-    _result="$("$_command" --has-path-as-alias "$_file_path" "$_root_dir" 2>&1)"
+    "$_command" --has-path-as-alias "$_file_path" "$_root_dir" 2>/dev/null
 
     if ! assert_success $?; then
         return 1
@@ -237,7 +238,11 @@ EOF
         return 1
     fi
 
-    if assert_empty "$_result" && grep -i "aliases" <<<"$_result" >/dev/null; then
+    if ! assert_not_empty "$_result"; then
+        return 1
+    fi
+
+    if ! grep -i "aliases" <<<"$_result" >/dev/null; then
         return 1
     fi
 }
@@ -261,7 +266,11 @@ EOF
         return 1
     fi
 
-    if assert_empty "$_result" && grep -i "aliases" <<<"$_result" >/dev/null; then
+    if ! assert_not_empty "$_result"; then
+        return 1
+    fi
+
+    if !grep -i "aliases" <<<"$_result" >/dev/null; then
         return 1
     fi
 }
@@ -278,8 +287,7 @@ This is a valid markdown file.
 EOF
     local _root_dir="$_test_dir"
 
-    local _result
-    _result="$("$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir" 2>&1)"
+    "$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir" 2>/dev/null
 
     if ! assert_failure $?; then
         return 1
@@ -298,8 +306,7 @@ This is a valid markdown file.
 EOF
     local _root_dir="$_test_dir"
 
-    local _result
-    _result="$("$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir" 2>&1)"
+    "$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir" 2>/dev/null
 
     if ! assert_failure $?; then
         return 1
@@ -319,8 +326,7 @@ This is a valid markdown file.
 EOF
     local _root_dir="$_test_dir"
 
-    local _result
-    _result="$("$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir" 2>&1)"
+    "$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir" 2>/dev/null
 
     if ! assert_success $?; then
         return 1
@@ -341,8 +347,7 @@ This is a valid markdown file.
 EOF
     local _root_dir="$_test_dir"
 
-    local _result
-    _result="$("$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir")"
+    "$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir"
 
     if ! assert_success $?; then
         return 1
@@ -363,8 +368,8 @@ This is a valid markdown file.
 EOF
     local _root_dir="$_test_dir"
 
-    local _result
-    _result="$("$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir" 2>&1)"
+    "$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir" 2>/dev/null
+
     if ! assert_success $?; then
         return 1
     fi
@@ -385,8 +390,8 @@ This is a valid markdown file.
 EOF
     local _root_dir="$_test_dir"
 
-    local _result
-    _result="$("$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir" 2>&1)"
+    "$_command" --has-path-as-alias --strict "$_file_path" "$_root_dir" 2>/dev/null
+
     if ! assert_success $?; then
         return 1
     fi

@@ -166,7 +166,7 @@ validate_arguments() {
 
 should_be_published() {
     local -r _file="${1?Missing file argument}"
-    if [[ "$_arg_only_published" == "off" ]]; then
+    if ! is_on "$_arg_only_published"; then
         return 0
     elif _value=$(frontmatter-parser "$_file" --parameter "publish" 2>/dev/null); then
         [[ "${_value#*[$'\t']}" == "true" ]] && return 0
@@ -215,7 +215,7 @@ check_valid_aliases() {
         _relative_file_path="${_file#"$_arg_directory"}"
         for ext in "${_markdown_extensions[@]}"; do
             if [[ "$_relative_file_path" == *.$ext ]]; then
-                _relative_file_path="${_relative_file_path%.$ext}"
+                _relative_file_path="${_relative_file_path%."$ext"}"
                 break
             fi
         done
@@ -266,7 +266,7 @@ main() {
         fi
     done
 
-    if [[ "$_arg_print0" == "on" ]]; then
+    if is_on "$_arg_print0"; then
         printf '%s\0' "${_files_to_publish[@]}"
     else
         printf '%s\n' "${_files_to_publish[@]}"
