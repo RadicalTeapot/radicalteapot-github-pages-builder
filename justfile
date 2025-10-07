@@ -31,7 +31,7 @@ serve: _build-server-image
         {{image-name-server}} \
         hugo server --bind=0.0.0.0 --poll 750ms
 
-build-site: _build-builder-image
+build: _build-builder-image
     podman run \
         --rm \
         --env=BASE_URL={{base_url}} \
@@ -47,20 +47,21 @@ clean:
     rm -rf "{{site_content}}/*"
     rm -rf "{{publish_dir}}/*"
 
-test-extract-links: (test "extract-links")
-test-frontmatter-parser: (test "frontmatter-parser")
-test-get-files-to-publish: (test "get-files-to-publish")
-test-publish-site: (test "publish-site")
-test-validate-markdown-content: (test "validate-markdown-content")
-test COMMAND: _build-test-image
-    echo "Test command {{COMMAND}}"
-    podman run --rm {{image-name-testing}} bash './{{COMMAND}}_command/test.sh'
+test-extract-links: (_test_command "extract-links")
+test-frontmatter-parser: (_test_command "frontmatter-parser")
+test-get-files-to-publish: (_test_command "get-files-to-publish")
+test-publish-site: (_test_command "publish-site")
+test-validate-markdown-content: (_test_command "validate-markdown-content")
 
 test-all: _build-test-image
     podman run --rm {{image-name-testing}} bash './test_all.sh'
 
 test-interactive: _build-test-image
     podman run --interactive --tty --rm {{image-name-testing}} 'bash'
+
+_test_command COMMAND: _build-test-image
+    echo "Testing command {{COMMAND}}"
+    podman run --rm {{image-name-testing}} bash './{{COMMAND}}_command/test.sh'
 
 _build-base-image: && (_build-image "base" image-name-base)
     echo "Building image..."
