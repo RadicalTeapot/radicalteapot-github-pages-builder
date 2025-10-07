@@ -266,10 +266,14 @@ main() {
         fi
     done
 
-    if is_on "$_arg_print0"; then
-        printf '%s\0' "${_files_to_publish[@]}"
+    if [[ "${#_files_to_publish[@]}" -eq 0 ]]; then
+        printf ''  # Print nothing
     else
-        printf '%s\n' "${_files_to_publish[@]}"
+        if is_on "$_arg_print0"; then
+            printf '%s\0' "${_files_to_publish[@]}"
+        else
+            printf '%s\n' "${_files_to_publish[@]}"
+        fi
     fi
 }
 
