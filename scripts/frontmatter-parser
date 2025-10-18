@@ -21,12 +21,12 @@ EX_INVALID_FRONTMATTER=4
 USAGE="Usage: frontmatter-parser.sh [-p|--parameter <name>]... [-0|--print0] [--value-only] [-h|--help] [-v|--verbose <level>] [-q|--quiet] [--strict] [--] <file>"
 
 # Helpers
-_arg_verbose=1
+_verbose_level=1
 
-debug() { if (( _arg_verbose >= 3 )); then printf '[DEBUG] %s\n' "$*" >&2; fi; }
-log()   { if (( _arg_verbose >= 2 )); then printf '%s\n' "$*" >&2; fi; }
-warn()  { if (( _arg_verbose >= 1 )); then printf '[WARN] %s\n' "$*" >&2; fi; }
-error() { printf '%s\n' "$@" >&2; }
+debug() { if (( _verbose_level >= 3 )); then printf '[DEBUG] %s\n' "$*" >&2; fi; }
+log()   { if (( _verbose_level >= 2 )); then printf '%s\n' "$*" >&2; fi; }
+warn()  { if (( _verbose_level >= 1 )); then printf '[WARN] %s\n' "$*" >&2; fi; }
+error() { printf '[ERROR] %s\n' "$@" >&2; }
 is_on() { [[ "$1" == "on" ]]; }
 
 die() {
@@ -115,72 +115,68 @@ parse_commandline() {
     while [[ $# -gt 0 ]]; do
         _key="$1"
         case "$_key" in
-            -p|--parameter)
-                shift
-                if [[ -z "${1:-}" ]]; then
-                    _PRINT_USAGE="on" die "--parameter requires a value." $EX_USAGE
-                fi
-                _arg_parameters+=("$1")
-                shift
-                ;;
-            --parameter=*)
-                local -r _value="${_key##--parameter=}"
-                if [[ -z "$_value" ]]; then
-                    _PRINT_USAGE="on" die "--parameter requires a value." $EX_USAGE
-                fi
-                _arg_parameters+=("$_value")
-                shift
-                ;;
-            -h|--help)
-                print_help
-                exit 0
-                ;;
-            -0|--print0)
-                _arg_print0="on"
-                shift
-                ;;
-            --value-only)
-                _arg_value_only="on"
-                shift
-                ;;
-            -v | --verbose)
-                shift
-                if [[ $# -lt 1 ]]; then
-                    _PRINT_USAGE="on" die "--verbose requires a value." $EX_USAGE
-                fi
-                case "$1" in
-                0 | quiet) _arg_verbose=0 ;;
-                1 | normal) _arg_verbose=1 ;;
-                2 | verbose) _arg_verbose=2 ;;
-                3 | debug) _arg_verbose=3 ;;
-                *)
-                    _PRINT_USAGE="on" die "Invalid value for --verbose: '$1'. Must be one of: 0 or 'quiet', 1 or 'normal', 2 or 'verbose', 3 or 'debug'." $EX_USAGE
-                    ;;
-                esac
-                shift
-                ;;
-            -q | --quiet)
-                _arg_verbose=0
-                shift
-                ;;
-            --strict)
-                _arg_strict="on"
-                shift
-                ;;
-            --) # End of all options
-                shift
-                while [[ $# -gt 0 ]]; do
-                    _positionals+=("$1")
-                    shift
-                done
-                ;;
-            -*) # Unknown option
-                _PRINT_USAGE="on" die "Unknown option '$1'." $EX_USAGE
-                ;;
-            *) # Positional argument
+        -p|--parameter)
+            shift
+            if [[ -z "${1:-}" ]]; then
+                _PRINT_USAGE="on" die "--parameter requires a value." $EX_USAGE
+            fi
+            _arg_parameters+=("$1")
+            shift
+            ;;
+        --parameter=*)
+            local -r _value="${_key##--parameter=}"
+            if [[ -z "$_value" ]]; then
+                _PRINT_USAGE="on" die "--parameter requires a value." $EX_USAGE
+            fi
+            _arg_parameters+=("$_value")
+            shift
+            ;;
+        -h|--help)
+            print_help
+            exit 0
+            ;;
+        -0|--print0)
+            _arg_print0="on"
+            shift
+            ;;
+        --value-only)
+            _arg_value_only="on"
+            shift
+            ;;
+        -v | --verbose)
+            shift
+            if [[ $# -lt 1 ]]; then
+                _PRINT_HELP="on" die "--verbose requires a value." 1
+            fi
+            _arg_verbose="$1"
+            shift
+            ;;
+        -v=* | --verbose=*)
+            _arg_verbose="${_key##*=}"
+            shift
+            ;;
+        -q | --quiet)
+            _arg_verbose=0
+            shift
+            ;;
+        --strict)
+            _arg_strict="on"
+            shift
+            ;;
+        --) # End of all options
+            shift
+            while [[ $# -gt 0 ]]; do
                 _positionals+=("$1")
                 shift
-                ;;
+            done
+            ;;
+        -*) # Unknown option
+            _PRINT_USAGE="on" die "Unknown option '$1'." $EX_USAGE
+            ;;
+        *) # Positional argument
+            _positionals+=("$1")
+            shift
+            ;;
         esac
     done
 
@@ -204,6 +200,16 @@ validate_arguments() {
     if [[ ! -f "$_arg_file_path" ]]; then
         die "File '$_arg_file_path' not found." $EX_NOINPUT
     fi
+
+    case "$_arg_verbose" in
+        0 | quiet) _verbose_level=0 ;;
+        1 | normal) _verbose_level=1 ;;
+        2 | verbose) _verbose_level=2 ;;
+        3 | debug) _verbose_level=3 ;;
+        *)
+            _PRINT_HELP="on" die "Invalid value for --verbose: '$_arg_verbose'. Must be one of: 0 or 'quiet', 1 or 'normal', 2 or 'verbose', 3 or 'debug'." $EX_USAGE
+            ;;
+    esac
 
     # Internal errors
     case "$_arg_print0" in
