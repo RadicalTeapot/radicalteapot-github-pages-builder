@@ -7,7 +7,7 @@ array:
   - "Item 2"
   - "  Item 3"
 nested:
-  key: "  Nested Value  "
+  nested-key: "  Nested Value  "
 ---
 
 # Title

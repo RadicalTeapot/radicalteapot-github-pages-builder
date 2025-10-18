@@ -16,7 +16,7 @@ test_runner() {
 
 test_single_no_space() {
     local _result
-    _result="$(bash $_command $_test_file --parameter "no-space")"
+    _result="$("$_command" --strict --parameter "no-space" -- "$_test_file")"
     if ! assert_not_empty "$_result"; then
         return 1
     fi
@@ -34,7 +34,7 @@ test_single_no_space() {
 
 test_single_with_space() {
     local _result
-    _result="$(bash $_command $_test_file --parameter "with-space")"
+    _result="$("$_command" --strict --parameter "with-space" -- "$_test_file")"
     if ! assert_not_empty "$_result"; then
         return 1
     fi
@@ -52,7 +52,7 @@ test_single_with_space() {
 
 test_single_with_leading_and_trailing_space() {
     local _result
-    _result=$(bash $_command $_test_file --parameter "with-leading-and-trailing-space")
+    _result=$("$_command" --strict --parameter "with-leading-and-trailing-space" -- "$_test_file")
     if ! assert_not_empty "$_result"; then
         return 1
     fi
@@ -69,19 +69,22 @@ test_single_with_leading_and_trailing_space() {
 }
 
 test_no_parameter() {
-    local _result
-    _result="$(bash $_command $_test_file)"
+    local -a _result=()
+    readarray -d '' -t _result < <("$_command" --strict --print0 -- "$_test_file")
 
-    readarray -t _arr < <(printf '%s' "$_result") # trim trailing newlines
-    if ! assert_eq ${#_arr[@]} 5 "Expected at 5 lines, got ${#_arr[@]}"; then
+    if ! assert_success $?; then
         return 1
     fi
 
-    if ! assert_eq "${_arr[0]}" "with-space" \
-        || ! assert_eq "${_arr[1]}" "no-space" \
-        || ! assert_eq "${_arr[2]}" "with-leading-and-trailing-space" \
-        || ! assert_eq "${_arr[3]}" "array" \
-        || ! assert_eq "${_arr[4]}" "nested"; then
+    if ! assert_eq ${#_result[@]} 5 "Expected 5 parameters, got ${#_result[@]} (${_result[*]})"; then
+        return 1
+    fi
+
+    if ! assert_eq "${_result[0]}" "with-space" \
+        || ! assert_eq "${_result[1]}" "no-space" \
+        || ! assert_eq "${_result[2]}" "with-leading-and-trailing-space" \
+        || ! assert_eq "${_result[3]}" "array" \
+        || ! assert_eq "${_result[4]}" "nested"; then
         return 1
     fi
 
@@ -91,7 +94,7 @@ test_no_parameter() {
 test_array() {
     local _result
     local arr
-    _result="$(bash $_command $_test_file --parameter "array")"
+    _result="$("$_command" --strict --parameter "array" -- "$_test_file")"
     if ! assert_not_empty "$_result"; then
         return 1
     fi
@@ -109,21 +112,21 @@ test_array() {
 }
 
 test_nested() {
-    "$_command" "$_test_file" --parameter "nested"
+    "$_command" --strict --parameter "nested" -- "$_test_file" 2>/dev/null
     if ! assert_failure $?; then
         return 1
     fi
 }
 
 test_non_existing_file() {
-    "$_command" "non_existing.md" 2>/dev/null
+    "$_command" --strict -- "non_existing.md" 2>/dev/null
     if ! assert_failure $?; then
         return 1
     fi
 }
 
 test_non_existing_parameter() {
-    "$_command" "$_test_file" --parameter non_existing 2>/dev/null
+    "$_command" --strict --parameter "non_existing" -- "$_test_file" 2>/dev/null
     if ! assert_failure $?; then
         return 1
     fi
@@ -131,7 +134,7 @@ test_non_existing_parameter() {
 
 test_value_only_option() {
     local _result
-    _result="$($_command $_test_file --parameter "no-space" --value-only)"
+    _result="$("$_command" --strict --parameter "no-space" --value-only -- "$_test_file")"
     if ! assert_not_empty "$_result"; then
         return 1
     fi
@@ -143,7 +146,7 @@ test_value_only_option() {
 
 test_print0() {
     local -a _result
-    readarray -d '' -t _result < <("$_command" --parameter "no-space" --print0 "$_test_file")
+    readarray -d '' -t _result < <("$_command" --strict --parameter "no-space" --print0 -- "$_test_file")
     if ! assert_success $?; then
         return 1
     fi
@@ -159,7 +162,7 @@ test_print0() {
 
 test_value_only_multi_parameter_print0() {
     local -a _result
-    readarray -d '' -t _result < <("$_command" --parameter "no-space" --parameter "with-space" --value-only --print0 "$_test_file")
+    readarray -d '' -t _result < <("$_command" --strict --parameter "no-space" --parameter "with-space" --value-only --print0 -- "$_test_file")
     if ! assert_success $?; then
         return 1
     fi
@@ -175,7 +178,7 @@ test_value_only_multi_parameter_print0() {
 
 test_array_print0() {
     local -a _result
-    readarray -d '' -t _result < <("$_command" --parameter "array" --print0 "$_test_file")
+    readarray -d '' -t _result < <("$_command" --strict --parameter "array" --print0 -- "$_test_file")
     if ! assert_success $?; then
         return 1
     fi
