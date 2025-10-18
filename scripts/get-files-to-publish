@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-log()   { printf '%s\n' "$*" >&2; }
+_arg_verbose=1
+
+debug() { if (( _arg_verbose >= 3 )); then printf '[DEBUG] %s\n' "$*" >&2; fi; }
+log()   { if (( _arg_verbose >= 2 )); then printf '%s\n' "$*" >&2; fi; }
+warn()  { if (( _arg_verbose >= 1 )); then printf '[WARN] %s\n' "$*" >&2; fi; }
 error() { printf '[ERROR] %s\n' "$*" >&2; }
 is_on() { [[ "$1" == "on" ]]; }
 
 die() {
     local _ret="${2:-1}"
-    if is_on "${_PRINT_HELP:-no}"; then print_help >&2; fi
+    if is_on "${_PRINT_HELP:-no}" && (( _arg_verbose > 0 )); then print_help >&2; fi
     error "$1"
     exit "$_ret"
 }
@@ -17,14 +21,15 @@ trap 'die "Error (exit $?): ${BASH_SOURCE[1]}:${BASH_LINENO[0]} in ${FUNCNAME[1]
 print_help() {
     cat <<'USAGE'
 Output publishable markdown files in given directory
-Usage: get-files-to-publish [-p|--(no-)only-published] [-m|--missing-alias <arg>] [-0|--print0] [-h|--help] <directory>
+Usage: get-files-to-publish [--ignore-publish-state] [-m|--missing-alias <arg>] [-0|--print0] [-h|--help] [-v|--verbose <level>] <directory>
 
 Arguments:
     <directory>: Directory containing the markdown files
-    -p, --only-published, --no-only-published: Output only files with a 'publish: true' option in their front-matter (off by default)
-    -m, --missing-alias: Check for 'aliases' option if 'slug' or 'url' is set in file front-matter ('ignore', 'warn', 'skip-file' or 'error'. Default: 'ignore')
-    -0, --print0: Separate output filenames with null character (for use when piping to other commands)
-    -h, --help: Prints help
+    --ignore-publish-state                      Ignore 'publish' option in front-matter (default: false)
+    -m, --missing-alias                         Check for 'aliases' option if 'slug' or 'url' is set in file front-matter ('ignore', 'warn' or 'error'. Default: 'ignore')
+    -0, --print0                                Separate output filenames with null character (for use when piping to other commands)
+    -v, --verbose <level>                       Set verbosity level (0 or 'quiet', 1 or 'normal' (default), 2 or 'verbose', 3 or 'debug')
+    -h, --help                                  Display this help message and exit.
 
 Examples:
     get-files-to-publish ./content/posts
@@ -32,7 +37,7 @@ Examples:
     get-files-to-publish --only-published --missing-alias warn ./content/posts
 
 Dependencies:
-    - frontmatter-parser
+    - is-file-publishable
     - realpath
     - find
     - sed
@@ -40,7 +45,7 @@ Dependencies:
 
 Error codes:
     1: Invalid command line arguments
-    2: frontmatter-parser command not found
+    2: is-file-publishable command not found
     3: Required command not found (realpath, find, readarray, sed)
     4: Invalid or missing directory argument
     5: Missing or invalid aliases in front-matter
@@ -56,7 +61,7 @@ USAGE
 }
 
 # DEFAULTS INITIALIZATION
-_arg_only_published="off"
+_arg_ignore_publish_state="off"
 _arg_missing_alias="ignore"
 _arg_print0="off"
 _arg_directory=""
@@ -69,9 +74,8 @@ parse_commandline() {
     while [[ $# -gt 0 ]]; do
         _key="$1"
         case "$_key" in
-        -p | --no-only-published | --only-published)
-            _arg_only_published="on"
-            if [[ "${1:0:5}" == "--no-" ]]; then _arg_only_published="off"; fi
+        --ignore-publish-state)
+            _arg_ignore_publish_state="on"
             shift
             ;;
         -m | --missing-alias)
@@ -93,6 +97,22 @@ parse_commandline() {
         -h | --help)
             print_help
             exit 0
+            ;;
+        -v | --verbose)
+            shift
+            if [[ $# -lt 1 ]]; then
+                _PRINT_HELP="on" die "--verbose requires a value." 1
+            fi
+            case "$1" in
+            0 | quiet) _arg_verbose=0 ;;
+            1 | normal) _arg_verbose=1 ;;
+            2 | verbose) _arg_verbose=2 ;;
+            3 | debug) _arg_verbose=3 ;;
+            *)
+                _PRINT_HELP="on" die "Invalid value for --verbose: '$1'. Must be one of: 0 or 'quiet', 1 or 'normal', 2 or 'verbose', 3 or 'debug'." 1
+                ;;
+            esac
+            shift
             ;;
         --) # end of options
             shift
@@ -123,8 +143,8 @@ parse_commandline() {
 }
 
 check_dependencies() {
-    if ! command -v frontmatter-parser &>/dev/null; then
-        die "Error: Could not find frontmatter-parser in PATH." 2
+    if ! command -v is-file-publishable &>/dev/null; then
+        die "Error: Could not find is-file-publishable in PATH." 2
     fi
     if ! command -v realpath &>/dev/null; then
         die "Error: Could not find realpath in PATH." 3
@@ -136,7 +156,7 @@ check_dependencies() {
         die "Error: Could not find sed in PATH." 3
     fi
 
-    if (( BASH_VERSINFO[0] < 4 && BASH_VERSINFO[1] < 3 )); then
+    if (( BASH_VERSINFO[0] < 4 || ( BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3 ) )); then
         die "Bash version 4.3 or higher is required. Current version is ${BASH_VERSION}." 3
     fi
 }
@@ -144,113 +164,26 @@ check_dependencies() {
 validate_arguments() {
     [[ -z "$_arg_directory" ]] && die "Error: No source directory specified." 4
     if [[ ! -d "$_arg_directory" ]]; then
-        die "Error: Source directory '$_arg_directory' does not exist." 4
+        die "Source directory '$_arg_directory' does not exist." 4
     fi
     _arg_directory="${_arg_directory%/}/" # Normalize directory path to always end with a slash for alias matching
 
     case "$_arg_missing_alias" in
-    ignore | warn | skip-file | error) ;;
+    ignore | warn | error) ;;
     *)
-        _PRINT_HELP="on" die "Invalid value for --missing-alias: '$_arg_missing_alias'. Must be one of: 'ignore', 'warn', 'skip-file', 'error'." 1
+        _PRINT_HELP="on" die "Invalid value for --missing-alias: '$_arg_missing_alias'. Must be one of: 'ignore', 'warn', 'error'." 1
         ;;
     esac
 
     # Internal errors
-    case "$_arg_only_published" in
+    case "$_arg_ignore_publish_state" in
         on | off) ;;
-        *) die "Internal error: Invalid value for --only-published: '$_arg_only_published'. Allowed values are 'on' or 'off'." 1 ;;
+        *) die "Internal error: Invalid value for --only-published: '$_arg_ignore_publish_state'. Allowed values are 'on' or 'off'." 1 ;;
     esac
     case "$_arg_print0" in
         on | off) ;;
         *) die "Internal error: Invalid value for --print0: '$_arg_print0'. Allowed values are 'on' or 'off'." 1 ;;
     esac
-}
-
-should_be_published() {
-    local -r _file="${1?Missing file argument}"
-    if ! is_on "$_arg_only_published"; then
-        return 0
-    elif _value=$(frontmatter-parser "$_file" --parameter "publish" --value-only); then
-        if [[ "$_value" == "true" ]]; then
-            return 0
-        fi
-    fi
-    return 1
-}
-
-get_aliases() {
-    # TODO Refactor this with new arguments (--value-only and --print0 from frontmatter-parser)
-    local -r _file="${1?Missing file argument}"
-    local _aliases
-    _aliases=$(frontmatter-parser "$_file" --parameter "aliases") || return 1
-    _aliases=${_aliases#*$'\t'}                          # drop leading key/sep if present
-    _aliases=${_aliases//\"/}                            # drop quotes
-    tr ',' '\n' <<<"$_aliases" | sed '/^[[:space:]]*$/d' # Replace commas with newlines and remove empty lines
-}
-
-check_valid_aliases() {
-    local -r _file="${1?Missing file argument}"
-    local _slug _url _aliases _aliases_array _relative_file_path
-
-    # Skip if not checking for alias
-    if [[ "$_arg_missing_alias" == "ignore" ]]; then
-        return 0
-    fi
-
-    _slug=$(frontmatter-parser "$_file" --parameter "slug" --value-only || echo "")
-    _url=$(frontmatter-parser "$_file" --parameter "url" --value-only || echo "")
-
-    # Skip if no slug or url
-    if [[ -z "$_slug" && -z "$_url" ]]; then
-        return 0
-    fi
-
-    if ! _aliases=$(get_aliases "$_file"); then
-        case "$_arg_missing_alias" in
-        warn)
-            echo "Warning: File '$_file' has 'slug' or 'url' set but no 'aliases' option." >&2
-            return 0
-            ;;
-        skip-file)
-            echo "Skipping file '$_file' because it has 'slug' or 'url' set but no 'aliases' option." >&2
-            return 1
-            ;;
-        error)
-            die "Error: File '$_file' has 'slug' or 'url' set but no 'aliases' option." 5
-            ;;
-        esac
-    fi
-
-    # Check if file is in aliases
-    _relative_file_path="${_file#"$_arg_directory"}"
-    for ext in "${_markdown_extensions[@]}"; do
-        if [[ "$_relative_file_path" == *.$ext ]]; then
-            _relative_file_path="${_relative_file_path%."$ext"}"
-            break
-        fi
-    done
-    local _found_alias="false"
-    while IFS= read -r _alias; do
-        if [[ "$_alias" == "$_relative_file_path" ]]; then
-            _found_alias="true"
-            break
-        fi
-    done <<<"$_aliases"
-
-    if [[ "$_found_alias" == "false" ]]; then
-        case "$_arg_missing_alias" in
-        warn)
-            echo "Warning: File '$_file' has 'slug' or 'url' set but its filename '$_relative_file_path' is not in 'aliases'." >&2
-            ;;
-        skip-file)
-            echo "Skipping file '$_file' because it has 'slug' or 'url' set but its filename '$_relative_file_path' is not in 'aliases'." >&2
-            return 1
-            ;;
-        error)
-            die "Error: File '$_file' has 'slug' or 'url' set but its filename '$_relative_file_path' is not in 'aliases'." 5
-            ;;
-        esac
-    fi
 }
 
 main() {
@@ -272,13 +205,16 @@ main() {
         die "No markdown files found in $_arg_directory" 6
     fi
 
+    # Run is-file-publishable in parallel on all found markdown files
+    local -r _xargs_max_procs="${NPROC:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
+    debug "Using up to $_xargs_max_procs parallel processes for is-file-publishable"
+    # TODO Restore skip-file option for missing alias and make custom command here for it
+    local -r _xargs_command='file="$1"; is-file-publishable --ignore-publish-state '"$_arg_ignore_publish_state"' --alias-mode '"$_arg_missing_alias"' -- "$file" && printf "%s\0" "$file"'
+    debug "xargs command: $_xargs_command"
     local -a _files_to_publish=()
-    local _file
-    for _file in "${_md_files[@]}"; do
-        if should_be_published "$_file" && check_valid_aliases "$_file"; then
-            _files_to_publish+=("$(realpath "$_file")")
-        fi
-    done
+    readarray -d '' -t _files_to_publish < <(printf '%s\0' "${_md_files[@]}" | xargs -0 -n 1 -P "$_xargs_max_procs" bash -c  "$_xargs_command" _)
+
+    debug "Total publishable files found: ${#_files_to_publish[@]}"
 
     if [[ "${#_files_to_publish[@]}" -eq 0 ]]; then
         printf ''  # Print nothing

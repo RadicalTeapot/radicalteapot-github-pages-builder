@@ -9,6 +9,7 @@ COPY scripts/* /usr/local/bin/
 RUN chmod +x /usr/local/bin/extract-links \
     && chmod +x /usr/local/bin/frontmatter-parser \
     && chmod +x /usr/local/bin/get-files-to-publish \
+    && chmod +x /usr/local/bin/is-file-publishable \
     && chmod +x /usr/local/bin/validate-markdown-content \
     && chmod +x /usr/local/bin/publish-site
 

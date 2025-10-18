@@ -17,12 +17,13 @@ base_site_markdown_content_dir := absolute_path(env('BASE_MD_CONTENT_DIR', 'site
 
 copy-from-vault: _build-base-image
     mkdir -p "{{site_content}}"
+    echo "Copying from vault {{vault}} to site content {{site_content}}"
     podman run \
         --rm \
         --volume "{{vault}}:/vault:ro,Z" \
         --volume "{{site_content}}:/publish:Z" \
         {{image-name-base}} \
-        bash publish-site /vault /publish
+        publish-site /vault /publish
 
 serve: _build-server-image _copy_site_markdown_files
     podman run \
@@ -54,6 +55,7 @@ test-frontmatter-parser: (_test_command "frontmatter-parser")
 test-get-files-to-publish: (_test_command "get-files-to-publish")
 test-publish-site: (_test_command "publish-site")
 test-validate-markdown-content: (_test_command "validate-markdown-content")
+test-is-file-publishable: (_test_command "is-file-publishable")
 
 test-all: _build-test-image
     podman run --rm {{image-name-testing}} bash './test_all.sh'
