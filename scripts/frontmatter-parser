@@ -93,6 +93,7 @@ Error Codes:
 USAGE
 }
 
+_arg_verbose=0
 _arg_file_path=""
 _arg_print0="off"
 _arg_value_only="off"

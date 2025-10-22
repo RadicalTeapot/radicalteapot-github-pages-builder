@@ -23,7 +23,7 @@ is_on() { [[ "$1" == "on" ]]; }
 die() {
     local -r _message="${1:-"Unknown error"}"
     local -r _ret="${2:-${EX_UNKNOWN}}"
-    if is_on "${_PRINT_USAGE:-no}" && (( _arg_verbose > 0 )); then "$USAGE" >&2; fi
+    if is_on "${_PRINT_USAGE:-no}" && (( _verbose_level > 0 )); then "$USAGE" >&2; fi
     local _err_tag=""
     case "$_ret" in
         "$EX_USAGE") _err_tag="[E.USAGE]" ;;
@@ -74,6 +74,7 @@ Error codes:
 USAGE
 }
 
+_arg_verbose=0
 _arg_ignore_publish_state="off"
 _arg_alias_mode="ignore"
 _arg_file=""
@@ -85,7 +86,7 @@ parse_commandline() {
     while [[ $# -gt 0 ]]; do
         _key="$1"
         case "$_key" in
-        --ignore-publish-state | --no-ignore-publish-state)
+        --ignore-publish-state)
             _arg_ignore_publish_state="on"
             shift
             ;;
@@ -234,10 +235,6 @@ check_valid_aliases() {
         warn)
             warn "File '$_file' has 'slug' or 'url' set but no 'aliases' option."
             return 0
-            ;;
-        skip-file)
-            log "Skipping file '$_file' because it has 'slug' or 'url' set but no 'aliases' option."
-            return 1
             ;;
         error)
             die "Error: File '$_file' has 'slug' or 'url' set but no 'aliases' option." $EX_FRONTMATTER

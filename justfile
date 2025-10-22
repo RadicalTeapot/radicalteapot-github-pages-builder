@@ -15,6 +15,22 @@ site_content := absolute_path(env('SITE_CONTENT', 'site/content'))
 publish_dir := absolute_path(env('PUBLISH_DIR', 'publish'))
 base_site_markdown_content_dir := absolute_path(env('BASE_MD_CONTENT_DIR', 'site/base-markdown-content'))
 
+# Temp rule for quick testing
+get-files-to-publish: _build-base-image
+    podman run \
+        --interactive --tty --rm \
+        --volume "{{vault}}:/vault:ro,Z" \
+        --volume "{{site_content}}:/publish:Z" \
+        {{image-name-base}} \
+        get-files-to-publish /vault --only-published
+
+interactive: _build-base-image
+    podman run \
+        --interactive --tty --rm \
+        --volume "{{vault}}:/vault:ro,Z" \
+        --volume "{{site_content}}:/publish:Z" \
+        {{image-name-base}}
+
 copy-from-vault: _build-base-image
     mkdir -p "{{site_content}}"
     echo "Copying from vault {{vault}} to site content {{site_content}}"
