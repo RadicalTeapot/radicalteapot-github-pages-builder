@@ -26,13 +26,13 @@ die() {
     if is_on "${_PRINT_USAGE:-no}" && (( _verbose_level > 0 )); then "$USAGE" >&2; fi
     local _err_tag=""
     case "$_ret" in
-        "$EX_USAGE") _err_tag="[E.USAGE]" ;;
-        "$EX_NOINPUT") _err_tag="[E.NO_INPUT]" ;;
-        "$EX_UNAVAILABLE") _err_tag="[E.UNAVAILABLE]" ;;
-        "$EX_FRONTMATTER") _err_tag="[E.FRONTMATTER]" ;;
-        "$EX_INTERNAL") _err_tag="[E.INTERNAL]" ;;
-        "$EX_UNKNOWN") _err_tag="[E.UNKNOWN]" ;;
-        *) _err_tag="[E.CODE_${_ret}]" ;;
+        "$EX_USAGE") _err_tag="[USAGE]" ;;
+        "$EX_NOINPUT") _err_tag="[NO_INPUT]" ;;
+        "$EX_UNAVAILABLE") _err_tag="[UNAVAILABLE]" ;;
+        "$EX_FRONTMATTER") _err_tag="[FRONTMATTER]" ;;
+        "$EX_INTERNAL") _err_tag="[INTERNAL]" ;;
+        "$EX_UNKNOWN") _err_tag="[UNKNOWN]" ;;
+        *) _err_tag="[CODE_${_ret}]" ;;
     esac
     error "$_err_tag $_message"
     exit "$_ret"
