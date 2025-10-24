@@ -109,9 +109,132 @@ EOF
     fi
 }
 
-# TODO Alias tests
+test_file_with_slug_no_aliases_with_alias_mode_error() {
+    local _path
+    _path="${_test_dir}/file.md"
+    cat <<-'EOF' > "$_path"
+---
+publish: true
+slug: /my-slug/
+---
+EOF
+   "$_command" --alias-mode error "$_path" 2>/dev/null
+    if ! assert_failure $? "Expected failure when checking a file with slug but no aliases with --alias-mode error"; then
+        return 1
+    fi
+}
+
+test_file_with_slug_empty_aliases_with_alias_mode_error() {
+    local _path
+    _path="${_test_dir}/file.md"
+    cat <<-'EOF' > "$_path"
+---
+publish: true
+slug: /my-slug/
+aliases: []
+---
+EOF
+   "$_command" --alias-mode error "$_path" 2>/dev/null
+    if ! assert_failure $? "Expected failure when checking a file with slug and empty aliases with --alias-mode error"; then
+        return 1
+    fi
+}
+
+test_file_with_slug_and_wrong_aliases_with_alias_mode_error() {
+    local _path
+    _path="${_test_dir}/file.md"
+    cat <<-'EOF' > "$_path"
+---
+publish: true
+slug: /my-slug/
+aliases:
+  - /wrong-alias/
+---
+EOF
+   "$_command" --alias-mode error "$_path" 2>/dev/null
+    if ! assert_failure $? "Expected failure when checking a file with slug and wrong aliases with --alias-mode error"; then
+        return 1
+    fi
+}
+
+test_file_with_slug_and_valid_aliases_with_no_starting_slash() {
+    local _path
+    _path="${_test_dir}/file.md"
+    _alias="${_path#/}"
+    _alias="${_alias%.*}"
+    cat <<-EOF > "$_path"
+---
+publish: true
+slug: /my-slug/
+aliases:
+  - ${_alias}
+---
+EOF
+   "$_command" --alias-mode error "$_path" 2>/dev/null
+    if ! assert_success $? "Expected success when checking a file with slug and valid aliases (no starting slash) with --alias-mode error"; then
+        return 1
+    fi
+}
+
+test_file_with_slug_and_valid_aliases_starting_with_slash() {
+    local _path
+    _path="${_test_dir}/file.md"
+    _alias="${_path%.*}"
+    cat <<-EOF > "$_path"
+---
+publish: true
+slug: /my-slug/
+aliases:
+  - ${_alias}
+---
+EOF
+   "$_command" --alias-mode error "$_path" 2>/dev/null
+    if ! assert_success $? "Expected failure when checking a file with slug and invalid aliases (starting with slash) with --alias-mode error"; then
+        return 1
+    fi
+}
+
+test_file_with_slug_and_invalid_aliases_starting_ending_with_extension() {
+    local _path
+    _path="${_test_dir}/file.md"
+    _alias="${_path#/}"
+    cat <<-EOF > "$_path"
+---
+publish: true
+slug: /my-slug/
+aliases:
+  - ${_alias}
+---
+EOF
+   "$_command" --alias-mode error "$_path" 2>/dev/null
+    if ! assert_failure $? "Expected failure when checking a file with slug and invalid aliases (ending with extension) with --alias-mode error"; then
+        return 1
+    fi
+}
+
+test_file_with_slug_no_aliases_with_alias_mode_warn() {
+    local _path
+    _path="${_test_dir}/file.md"
+    cat <<-'EOF' > "$_path"
+---
+publish: true
+slug: /my-slug/
+---
+EOF
+   "$_command" --alias-mode warn "$_path" 2>/dev/null
+    if ! assert_success $? "Expected success when checking a file with slug but no aliases with --alias-mode warn"; then
+        return 1
+    fi
+}
 
 test_runner test_missing_file_parameter "Test missing file parameter"
 test_runner test_empty_file "Test empty file handling"
 test_runner test_file_with_publish_false "Test file with publish: false"
 test_runner test_file_with_publish_true "Test file with publish: true"
+test_runner test_file_with_slug_no_aliases_with_alias_mode_error "Test file with slug, no aliases and --alias-mode error"
+test_runner test_file_with_slug_empty_aliases_with_alias_mode_error "Test file with slug, empty aliases and --alias-mode error"
+test_runner test_file_with_slug_and_wrong_aliases_with_alias_mode_error "Test file with slug, wrong aliases and --alias-mode error"
+test_runner test_file_with_slug_and_valid_aliases_with_no_starting_slash "Test file with slug and valid aliases (no starting slash)"
+test_runner test_file_with_slug_and_valid_aliases_starting_with_slash "Test file with slug and valid aliases (starting with slash)"
+test_runner test_file_with_slug_and_invalid_aliases_starting_ending_with_extension "Test file with slug and invalid aliases (ending with extension)"
+test_runner test_file_with_slug_no_aliases_with_alias_mode_warn "Test file with slug, no aliases and --alias-mode warn"

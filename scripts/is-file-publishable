@@ -64,11 +64,17 @@ Dependencies:
     - realpath
     - Bash version 4.3 or higher
 
+Notes:
+    Supported alias formats are:
+      - Without leading slash: my-note
+      - With leading slash: /my-note
+    The alias must not include file extensions.
+
 Error codes:
     ${EX_USAGE}         Command line usage error (invalid flags, missing arguments)
     ${EX_NOINPUT}       Input file not found
     ${EX_UNAVAILABLE}   Dependency missing or unusable (e.g., yq not installed)
-    ${EX_FRONTMATTER}        No/empty/invalid front-matter
+    ${EX_FRONTMATTER}   No/empty/invalid front-matter
     ${EX_INTERNAL}      Internal error
     ${EX_UNKNOWN}       Unexpected error
 USAGE
@@ -244,14 +250,14 @@ check_valid_aliases() {
 
     # Remove leading slash and extension from filename
     local _clean_file_name
-    _clean_file_name=${_file#/}
+    _clean_file_name="${_file#/}"
     _clean_file_name="${_clean_file_name%.*}"
 
     local _found_alias="false"
     local _alias
     for _alias in "${_aliases[@]}"; do
-        # Check if alias ends with the cleaned filename
-        if [[ "$_alias" == "*${_clean_file_name}" ]]; then
+        # Check if alias matches cleaned filename (allowing leading slash in alias)
+        if [[ "${_alias#/}" == "${_clean_file_name}" ]]; then
             _found_alias="true"
             break
         fi
