@@ -236,10 +236,14 @@ main() {
     local -r _xargs_max_procs="${NPROC:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
     debug "Using up to $_xargs_max_procs parallel processes for is-file-publishable"
     # TODO Restore skip-file option for missing alias and make custom command here for it
-    local -r _xargs_command='file="$1"; is-file-publishable --ignore-publish-state '"$_arg_ignore_publish_state"' --alias-mode '"$_arg_missing_alias"' -- "$file" && printf "%s\0" "$file"'
+    local _publish_flag=""
+    if is_on "$_arg_ignore_publish_state"; then
+        _publish_flag="--ignore-publish-state"
+    fi
+    local -r _xargs_command='file="$1"; is-file-publishable '"$_publish_flag"' --alias-mode '"$_arg_missing_alias"' -- "$file" && printf "%s\0" "$file"'
     debug "xargs command: $_xargs_command"
     local -a _files_to_publish=()
-    readarray -d '' -t _files_to_publish < <(printf '%s\0' "${_md_files[@]}" | xargs -0 -n 1 -P "$_xargs_max_procs" bash -c  "$_xargs_command" _)
+    readarray -d '' -t _files_to_publish < <(printf '%s\0' "${_md_files[@]}" | xargs -0 -n 1 -P "$_xargs_max_procs" bash -c "$_xargs_command" _)
 
     debug "Total publishable files found: ${#_files_to_publish[@]}"
 

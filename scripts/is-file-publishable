@@ -285,12 +285,10 @@ main() {
     parse_commandline "$@"
     validate_arguments
 
-    if is_publishable "$_abs_file" "$_arg_ignore_publish_state" && check_valid_aliases "$_abs_file" "$_arg_alias_mode"; then
-        debug "File '$_abs_file' is publishable."
-        return 0
-    else
+    if !(is_publishable "$_abs_file" "$_arg_ignore_publish_state" && check_valid_aliases "$_abs_file" "$_arg_alias_mode"); then
         log "File '$_abs_file' is not publishable."
-        return 1
+        exit 1
     fi
+    debug "File '$_abs_file' is publishable."
 }
 main "$@"
