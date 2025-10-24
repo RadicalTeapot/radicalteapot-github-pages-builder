@@ -29,7 +29,7 @@ die() {
         "$EX_USAGE") _err_tag="[E.USAGE]" ;;
         "$EX_NOINPUT") _err_tag="[E.NO_INPUT]" ;;
         "$EX_UNAVAILABLE") _err_tag="[E.UNAVAILABLE]" ;;
-        "$EX_FRONTMATTER") _err_tag="[E.NO_DATA]" ;;
+        "$EX_FRONTMATTER") _err_tag="[E.FRONTMATTER]" ;;
         "$EX_INTERNAL") _err_tag="[E.INTERNAL]" ;;
         "$EX_UNKNOWN") _err_tag="[E.UNKNOWN]" ;;
         *) _err_tag="[E.CODE_${_ret}]" ;;
