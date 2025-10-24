@@ -10,7 +10,7 @@ EX_INTERNAL=198       # Internal error
 EX_UNKNOWN=199        # Unexpected error
 
 # Usage string
-USAGE="Usage: get-files-to-publish [--ignore-publish-state] [--alias-mode <arg>] [-h|--help] [-v|--verbose <level>] [--quiet] [--] <file>"
+USAGE="Usage: is-file-publishable [--ignore-publish-state] [--alias-mode <arg>] [-h|--help] [-v|--verbose <level>] [--quiet] [--] <file>"
 
 _verbose_level=1
 
@@ -57,7 +57,7 @@ Arguments:
 Examples:
     is-file-publishable note.md
     is-file-publishable --ignore-publish-state note.md
-    is-file-publishable --missing-alias warn note.md
+    is-file-publishable --alias-mode warn note.md
 
 Dependencies:
     - frontmatter-parser
