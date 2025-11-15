@@ -262,7 +262,7 @@ main() {
     if is_on "$_arg_ignore_publish_state"; then
         _publish_flag="--ignore-publish-state"
     fi
-    local -r _xargs_command='file="$1"; is-file-publishable '"$_publish_flag"' --alias-mode '"$_arg_missing_alias"' -- "$file" && printf "%s\0" "$file"'
+    local -r _xargs_command='file="$1"; is-file-publishable '"$_publish_flag"' --alias-mode '"$_arg_missing_alias"' --verbose-level '"$_verbose_level"' -- "$file" && printf "%s\0" "$file"'
     debug "xargs command: $_xargs_command"
     local -a _files_to_publish=()
     readarray -d '' -t _files_to_publish < <(printf '%s\0' "${_md_files[@]}" | xargs -0 -n 1 -P "$_xargs_max_procs" bash -c "$_xargs_command" _)
