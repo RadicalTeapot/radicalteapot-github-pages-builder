@@ -10,7 +10,7 @@ EX_INTERNAL=198       # Internal error
 EX_UNKNOWN=199        # Unexpected error
 
 # Usage string
-USAGE="Usage: is-file-publishable [--ignore-publish-state] [--alias-mode <arg>] [-h|--help] [-v|--verbose <level>] [--quiet] [--] <file>"
+USAGE="Usage: is-file-publishable [--ignore-publish-state] [--alias-mode <arg>] [-h|--help] [-v|--verbose-level <level>] [--quiet] [-vv|--very-verbose] [--] <file>"
 
 _verbose_level=1
 
@@ -46,13 +46,14 @@ Check if a file is publishable based on front-matter options.
 ${USAGE}
 
 Arguments:
-    <file>                  File to check (required)
-    --ignore-publish-state  Ignore 'publish' option in front-matter (default: false)
-    --alias-mode            Check for 'aliases' option if 'slug' or 'url' is set in file front-matter ('ignore', 'warn', 'error'. Default: 'ignore')
-    -v, --verbose <level>   Set verbosity level (0 or 'quiet', 1 or 'normal' (default), 2 or 'verbose', 3 or 'debug')
-    --quiet                 Quiet mode (same as -v 0)
-    -h, --help              Display this help message and exit.
-    --                      End of options
+    <file>                      File to check (required)
+    --ignore-publish-state      Ignore 'publish' option in front-matter (default: false)
+    --alias-mode                Check for 'aliases' option if 'slug' or 'url' is set in file front-matter ('ignore', 'warn', 'error'. Default: 'ignore')
+    -v, --verbose-level <level> Set verbosity level (0 or 'quiet', 1 or 'normal' (default), 2 or 'debug', 3 or 'verbose')
+    --very-verbose, -vv         Very verbose mode (same as -v 3)
+    --quiet                     Quiet mode (same as -v 0)
+    -h, --help                  Display this help message and exit.
+    --                          End of options
 
 Examples:
     is-file-publishable note.md
@@ -112,20 +113,24 @@ parse_commandline() {
             print_help
             exit 0
             ;;
-        -v | --verbose)
+        -v | --verbose-level)
             shift
             if [[ $# -lt 1 ]]; then
-                _PRINT_USAGE="on" die "--verbose requires a value." $EX_USAGE
+                _PRINT_USAGE="on" die "--verbose-level requires a value." $EX_USAGE
             fi
             _arg_verbose="$1"
             shift
             ;;
-        -v=* | --verbose=*)
+        -v=* | --verbose-level=*)
             _arg_verbose="${_key##*=}"
             shift
             ;;
         --quiet)
             _arg_verbose=0
+            shift
+            ;;
+        --very-verbose | -vv)
+            _arg_verbose=3
             shift
             ;;
         --)
@@ -181,20 +186,31 @@ validate_arguments() {
     esac
 
     case "$_arg_verbose" in
-        0 | quiet) _verbose_level=0 ;;
+        0 | quiet) 
+            if [[ ${_arg_alias_mode} == "warn" ]]; then
+                _verbose_level=1
+                warn "Warning: --alias-mode 'warn' is set but verbosity level is 'quiet'. Warnings would not be shown. Setting verbosity level to 'normal'."
+            else
+                _verbose_level=0
+            fi
+            ;;
         1 | normal) _verbose_level=1 ;;
-        2 | verbose) _verbose_level=2 ;;
-        3 | debug) _verbose_level=3 ;;
+        2 | debug) _verbose_level=2 ;;
+        3 | verbose) _verbose_level=3 ;;
         *)
-            _PRINT_USAGE="on" die "Invalid value for --verbose: '$_arg_verbose'. Must be one of: 0 or 'quiet', 1 or 'normal', 2 or 'verbose', 3 or 'debug'." $EX_USAGE
+            _PRINT_USAGE="on" die "Invalid value for --verbose: '$_arg_verbose'. Must be one of: 0 or 'quiet', 1 or 'normal', 2 or 'debug', 3 or 'verbose'." $EX_USAGE
             ;;
     esac
 
     # Internal errors
     case "$_arg_ignore_publish_state" in
         on | off) ;;
-        *) die "Internal error: Invalid value for --ignore-publish-state: '$_arg_ignore_publish_state'. Allowed values are 'on' or 'off'." $EX_INTERNAL ;;
+        *) die "Invalid value for --ignore-publish-state: '$_arg_ignore_publish_state'. Allowed values are 'on' or 'off'." $EX_INTERNAL ;;
     esac
+
+    if [[ ${_arg_alias_mode} == "warn" && ${_verbose_level} -eq 0 ]]; then
+        die "Warning mode with incompatible verbosity level 'quiet'." $EX_INTERNAL
+    fi
 }
 
 is_publishable() {
@@ -237,6 +253,7 @@ check_valid_aliases() {
     local -a _aliases=()
     readarray -d '' -t _aliases < <(frontmatter-parser --quiet --parameter "aliases" --value-only --print0 -- "$_file")
     if [[ "${#_aliases[@]}" -eq 0 ]]; then
+        debug "File '$_file' has 'slug' or 'url' set but no 'aliases' option."
         case "$_alias_mode" in
         warn)
             warn "File '$_file' has 'slug' or 'url' set but no 'aliases' option."
@@ -266,10 +283,10 @@ check_valid_aliases() {
     if [[ "$_found_alias" == "false" ]]; then
         case "$_alias_mode" in
         warn)
-            warn "File '$_file' has 'slug' or 'url' set but its filename '$_clean_file_name' is not in 'aliases'." >&2
+            warn "File '$_file' has 'slug' or 'url' set but its filename '$_clean_file_name' is not in 'aliases'."
             ;;
         skip-file)
-            log "Skipping file '$_file' because it has 'slug' or 'url' set but its filename '$_clean_file_name' is not in 'aliases'." >&2
+            log "Skipping file '$_file' because it has 'slug' or 'url' set but its filename '$_clean_file_name' is not in 'aliases'."
             return 1
             ;;
         error)

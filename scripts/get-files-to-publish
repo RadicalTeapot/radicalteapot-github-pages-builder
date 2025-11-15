@@ -11,7 +11,7 @@ EX_INTERNAL=198       # Internal error
 EX_UNKNOWN=199        # Unexpected error
 
 # Usage string
-USAGE="Usage: get-files-to-publish [--ignore-publish-state] [--alias-mode <arg>] [-0|--print0] [-h|--help] [-v|--verbose <level>] <directory>"
+USAGE="Usage: get-files-to-publish [--ignore-publish-state] [--alias-mode <arg>] [-0|--print0] [-h|--help] [-v|--verbose-level <level>] [--quiet] [-vv|--very-verbose] <directory>"
 
 _verbose_level=1
 
@@ -52,7 +52,9 @@ Arguments:
     --ignore-publish-state  Ignore 'publish' option in front-matter (default: false)
     --alias-mode            Check for 'aliases' option if 'slug' or 'url' is set in file front-matter ('ignore', 'warn', 'error'. Default: 'ignore')
     -0, --print0            Separate output filenames with null character (for use when piping to other commands)
-    -v, --verbose <level>   Set verbosity level (0 or 'quiet', 1 or 'normal' (default), 2 or 'verbose', 3 or 'debug')
+    -v, --verbose <level>   Set verbosity level (0 or 'quiet', 1 or 'normal' (default), 2 or 'debug', 3 or 'verbose')
+    --quiet                 Quiet mode (same as -v 0)
+    -vv, --very-verbose     Very verbose mode (same as -v 3)
     -h, --help              Display this help message and exit.
 
 Examples:
@@ -129,6 +131,14 @@ parse_commandline() {
             _arg_verbose="${_key##*=}"
             shift
             ;;
+        --quiet)
+            _arg_verbose=0
+            shift
+            ;;
+        -vv | --very-verbose)
+            _arg_verbose=3
+            shift
+            ;;
         --)
             # End of options
             shift
@@ -193,12 +203,19 @@ validate_arguments() {
     esac
 
     case "$_arg_verbose" in
-        0 | quiet) _verbose_level=0 ;;
+        0 | quiet) 
+            if [[ ${_arg_missing_alias} == "warn" ]]; then
+                _verbose_level=1
+                warn "Warning: --alias-mode 'warn' is set but verbosity level is 'quiet'. Warnings will not be shown. Setting verbosity level to 'normal'."
+            else
+                _verbose_level=0
+            fi 
+            ;;
         1 | normal) _verbose_level=1 ;;
-        2 | verbose) _verbose_level=2 ;;
-        3 | debug) _verbose_level=3 ;;
+        2 | debug) _verbose_level=2 ;;
+        3 | verbose) _verbose_level=3 ;;
         *)
-            _PRINT_USAGE="on" die "Invalid value for --verbose: '$_arg_verbose'. Must be one of: 0 or 'quiet', 1 or 'normal', 2 or 'verbose', 3 or 'debug'." $EX_USAGE
+            _PRINT_USAGE="on" die "Invalid value for --verbose: '$_arg_verbose'. Must be one of: 0 or 'quiet', 1 or 'normal', 2 or 'debug', 3 or 'verbose'." $EX_USAGE
             ;;
     esac
 
@@ -211,6 +228,10 @@ validate_arguments() {
         on | off) ;;
         *) die "Internal error: Invalid value for --print0: '$_arg_print0'. Allowed values are 'on' or 'off'." $EX_INTERNAL ;;
     esac
+
+    if [[ ${_arg_missing_alias} == "warn" && ${_verbose_level} -eq 0 ]]; then
+        die "Warning mode with incompatible verbosity level 'quiet'." $EX_INTERNAL
+    fi
 }
 
 main() {
@@ -220,6 +241,7 @@ main() {
     validate_arguments
 
     # Find all markdown files in the specified directory (support multiple extensions)
+    debug "Searching for markdown files in directory: $_arg_directory"
     local -a _md_files=()
     local _ext
     for _ext in "${_markdown_extensions[@]}"; do
@@ -231,11 +253,12 @@ main() {
     if [[ "${#_md_files[@]}" -eq 0 ]]; then
         die "No markdown files found in $_arg_directory" $EX_NODATA
     fi
+    debug "Total markdown files found: ${#_md_files[@]}"
 
     # Run is-file-publishable in parallel on all found markdown files
     local -r _xargs_max_procs="${NPROC:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
     debug "Using up to $_xargs_max_procs parallel processes for is-file-publishable"
-    # TODO Restore skip-file option for missing alias and make custom command here for it
+    # TODO Errors from is-file-publishable with alias-mode=error are not propagated correctly
     local _publish_flag=""
     if is_on "$_arg_ignore_publish_state"; then
         _publish_flag="--ignore-publish-state"

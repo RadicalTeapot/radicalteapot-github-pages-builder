@@ -22,7 +22,7 @@ get-files-to-publish: _build-base-image
         --volume "{{vault}}:/vault:ro,Z" \
         --volume "{{site_content}}:/publish:Z" \
         {{image-name-base}} \
-        get-files-to-publish /vault --only-published
+        get-files-to-publish /vault 
 
 interactive: _build-base-image
     podman run \

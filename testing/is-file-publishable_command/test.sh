@@ -221,10 +221,15 @@ publish: true
 slug: /my-slug/
 ---
 EOF
-   "$_command" --alias-mode warn "$_path" 2>/dev/null
-    if ! assert_success $? "Expected success when checking a file with slug but no aliases with --alias-mode warn"; then
-        return 1
-    fi
+   local _result;
+   _result="$("$_command" --alias-mode warn "$_path" 2>&1)"
+   if ! assert_success $? "Expected success when checking a file with slug but no aliases with --alias-mode warn"; then
+       return 1
+   fi
+
+   if ! assert_not_empty "$_result" "Expected warning message when checking a file with slug but no aliases with --alias-mode warn"; then
+       return 1
+   fi
 }
 
 test_runner test_missing_file_parameter "Test missing file parameter"

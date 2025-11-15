@@ -59,6 +59,12 @@ set -eEuo pipefail
 
 **Error Code Convention**: Scripts should use exit codes 101-199 for user errors and 1-99 for internal errors. `frontmatter-parser` exemplifies this pattern, but it's not yet consistently applied across all scripts.
 
+**Verbose Flags Convention**: Scripts should support standardized verbosity control:
+- Levels: `0|quiet`, `1|normal` (default), `2|debug`, `3|verbose`
+- Flags: `-v|--verbose <level>`, `--quiet` (same as `-v 0`), `-vv|--very-verbose` (same as `-v 3`)
+- Functions: `debug()` (level 3), `log()` (level 2), `warn()` (level 1), `error()` (always shown)
+- See `get-files-to-publish` for reference implementation
+
 ### Frontmatter Processing
 Uses `yq` for YAML parsing. Key frontmatter fields:
 - `publish: true` - Required for content inclusion
