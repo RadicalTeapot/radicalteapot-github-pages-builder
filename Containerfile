@@ -1,7 +1,7 @@
 FROM alpine:latest as base
 
 RUN apk update \
-    && apk add --no-cache git curl ca-certificates yq ripgrep rsync bash \
+    && apk add --no-cache git curl ca-certificates yq ripgrep rsync fd bash \
     && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community hugo \
     && rm -rf /var/cache/apk/*
 

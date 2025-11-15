@@ -65,7 +65,7 @@ Examples:
 Dependencies:
     - is-file-publishable
     - realpath
-    - find
+    - fd
     - sed
     - Bash version 4.3 or higher
 
@@ -87,7 +87,6 @@ _arg_missing_alias="ignore"
 _arg_print0="off"
 _arg_directory=""
 _markdown_extensions=("md")
-
 
 parse_commandline() {
     local _key
@@ -176,8 +175,8 @@ check_dependencies() {
     if ! command -v realpath &>/dev/null; then
         die "Error: Could not find realpath in PATH." $EX_UNAVAILABLE
     fi
-    if ! command -v find &>/dev/null; then
-        die "Error: Could not find find in PATH." $EX_UNAVAILABLE
+    if ! command -v fd &>/dev/null; then
+        die "Error: Could not find fd in PATH." $EX_UNAVAILABLE
     fi
     if ! command -v sed &>/dev/null; then
         die "Error: Could not find sed in PATH." $EX_UNAVAILABLE
@@ -246,7 +245,7 @@ main() {
     local _ext
     for _ext in "${_markdown_extensions[@]}"; do
         local -a _tmp_arr=()
-        readarray -d '' -t _tmp_arr < <(find "$_arg_directory" -type f -name "*.$_ext" -print0)
+        readarray -d '' -t _tmp_arr < <(fd --full-path "$_arg_directory" -e "$_ext" --print0)
         _md_files+=("${_tmp_arr[@]}")
     done
 
