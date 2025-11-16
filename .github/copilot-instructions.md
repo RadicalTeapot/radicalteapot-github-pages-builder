@@ -52,7 +52,7 @@ All bash scripts follow this pattern:
 ```bash
 #!/usr/bin/env bash
 set -eEuo pipefail
-# Structured error codes (100+ for user errors, 1-99 internal)
+# Structured error codes (100+ for user errors, 198 for internal error, 199 for unknown error)
 # Consistent logging: debug()/log()/warn()/error()
 # Help text via print_help() with examples
 ```

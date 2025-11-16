@@ -1,24 +1,55 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-log()  { printf '%s\n' "$*" >&2; }
-log_warn()  { printf '[WARN]  %s\n' "$*" >&2; }
-log_error() { printf '[ERROR] %s\n' "$*" >&2; }
+# Error codes
+EX_USAGE=101          # CLI misuse / invalid flags
+EX_NO_INPUT=102       # Missing or invalid source directory
+EX_NO_OUTPUT=103      # Missing or invalid output directory
+EX_CLEANING_ERROR=104 # Cleaning errors
+EX_COPY_ERROR=105     # Failed to copy files
+EX_DEP_ISSUE=106      # Dependency issues
+EX_INV_FILE=107       # Invalid file path
+EX_INTERNAL=198       # Internal error
+EX_UNKNOWN=199        # Unexpected error
+
+# Usage string
+USAGE="Usage: publish-site [-c|--clean] [-h|--help] [--yes] <source-directory> <output-directory>"
+
+_verbose_level=1
+
+debug() { if (( _verbose_level >= 3 )); then printf '[DEBUG] %s\n' "$*" >&2; fi; }
+log()   { if (( _verbose_level >= 2 )); then printf '%s\n' "$*" >&2; fi; }
+warn()  { if (( _verbose_level >= 1 )); then printf '[WARN] %s\n' "$*" >&2; fi; }
+error() { printf '[ERROR] %s\n' "$*" >&2; }
 is_on() { [[ "$1" == "on" ]]; }
 
 die() {
-    local _ret="${2:-1}"
-    [[ "${_PRINT_HELP:-no}" == "yes" ]] && print_help >&2
-    log_error "$1"
+    local -r _message="${1:-"Unknown error"}"
+    local -r _ret="${2:-${EX_UNKNOWN}}"
+    if is_on "${_PRINT_USAGE:-no}" && (( _verbose_level > 0 )); then "$USAGE" >&2; fi
+    local _err_tag=""
+    case "$_ret" in
+        "$EX_USAGE") _err_tag="[USAGE]" ;;
+        "$EX_NO_INPUT") _err_tag="[NO_INPUT]" ;;
+        "$EX_NO_OUTPUT") _err_tag="[NO_OUTPUT]" ;;
+        "$EX_CLEANING_ERROR") _err_tag="[CLEANING_ERROR]" ;;
+        "$EX_COPY_ERROR") _err_tag="[COPY_ERROR]" ;;
+        "$EX_DEP_ISSUE") _err_tag="[DEP_ISSUE]" ;;
+        "$EX_INV_FILE") _err_tag="[INV_FILE]" ;;
+        "$EX_INTERNAL") _err_tag="[INTERNAL]" ;;
+        "$EX_UNKNOWN") _err_tag="[UNKNOWN]" ;;
+        *) _err_tag="[CODE_${_ret}]" ;;
+    esac
+    error "$_err_tag $_message"
     exit "$_ret"
 }
 
-trap 'die "Error (exit $?): ${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}:${BASH_LINENO[0]} in ${FUNCNAME[1]:-main}" 99' ERR
+trap 'die "(exit $?): ${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}:${LINENO} in ${FUNCNAME[1]:-main}" ${EX_UNKNOWN}' ERR
 
 print_help() {
-    cat <<'USAGE'
+    cat <<USAGE
 Publish site to the specified output directory
-Usage: publish-site [-c|--clean] [-h|--help] [--yes] <source-directory> <output-directory>
+${USAGE}
 
 Arguments:
     <source-directory>: Directory containing the site source files
@@ -39,16 +70,20 @@ Dependencies:
     - Bash version 4.3 or higher
 
 Error codes:
-    1: Invalid command line arguments
-    2: Missing or invalid source or output directory argument
-    3: Cleaning errors
-    4: Failed to copy files
-    5: Dependency issues
-    99: Unexpected error
+    ${EX_USAGE}          Command line usage error (invalid flags, missing arguments)
+    ${EX_NO_INPUT}       Input file not found
+    ${EX_NO_OUTPUT}      Output directory issues
+    ${EX_CLEANING_ERROR} Cleaning errors
+    ${EX_COPY_ERROR}     Failed to copy files
+    ${EX_DEP_ISSUE}      Dependency missing or unusable
+    ${EX_INV_FILE}       Invalid file path
+    ${EX_INTERNAL}       Internal error
+    ${EX_UNKNOWN}        Unexpected error
 USAGE
 }
 
-_positionals=()
+# DEFAULTS INITIALIZATION
+_arg_verbose=1
 _arg_clean="off"
 _arg_yes="off"
 _arg_source_directory=""
@@ -56,23 +91,9 @@ _arg_output_directory=""
 _src=""
 _out=""
 
-check_dependencies() {
-    command -v get-files-to-publish &>/dev/null || \
-        die "get-files-to-publish command not found. Please install it and ensure it's in your PATH." 5
-    command -v extract-links &>/dev/null || \
-        die "extract-links command not found. Please install it and ensure it's in your PATH." 5
-    command -v rsync &>/dev/null || \
-        die "rsync command not found. Please install it and ensure it's in your PATH." 5
-    command -v realpath &>/dev/null || \
-        die "realpath command not found. Please install it and ensure it's in your PATH." 5
-    if ! (( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] >= 4 && BASH_VERSINFO[1] >= 3) )); then
-        die "Bash version 4.3 or higher is required. Current version is ${BASH_VERSION}." 5
-    fi
-}
-
 parse_commandline() {
-    _positionals_count=0
     local _key
+    local -a _positionals=()
     while [[ $# -gt 0 ]]; do
         _key="$1"
         case "$_key" in
@@ -88,66 +109,98 @@ parse_commandline() {
             _arg_yes="on"
             shift
             ;;
-        --) # end argument parsing
+        --) 
+            # End of options
             shift
             while [[ $# -gt 0 ]]; do
                 _positionals+=("$1")
                 shift
             done
             ;;
-        -*) # unknown option
-            _PRINT_HELP=yes die "Unknown option: '$_key'" 1
+        -*) 
+            # Unknown option
+            _PRINT_USAGE="on" die "Unknown option: '$_key'" $EX_USAGE
             ;;
-        *) # positional argument
+        *) 
+            # Positional argument
             _positionals+=("$1")
             shift
             ;;
         esac
     done
 
-    _positionals_count="${#_positionals[@]}"
+    local -r _positionals_count="${#_positionals[@]}"
     if [[ "${_positionals_count}" -lt 2 ]]; then
-        die "Not enough positional arguments: expected 2, got ${_positionals_count}" 1
+        die "Not enough positional arguments: expected 2, got ${_positionals_count}" $EX_USAGE
     fi
     if [[ "${_positionals_count}" -gt 2 ]]; then
-        die "Too many positional arguments: expected at most 2, got ${_positionals_count}" 1
+        die "Too many positional arguments: expected at most 2, got ${_positionals_count}" $EX_USAGE
     fi
 
     _arg_source_directory="${_positionals[0]}"
     _arg_output_directory="${_positionals[1]}"
 }
 
+check_dependencies() {
+    if ! command -v get-files-to-publish &>/dev/null; then
+        die "get-files-to-publish command not found. Please install it and ensure it's in your PATH." $EX_DEP_ISSUE
+    fi
+    if ! command -v extract-links &>/dev/null; then
+        die "extract-links command not found. Please install it and ensure it's in your PATH." $EX_DEP_ISSUE
+    fi
+    if ! command -v rsync &>/dev/null; then
+        die "rsync command not found. Please install it and ensure it's in your PATH." $EX_DEP_ISSUE
+    fi
+    if ! command -v realpath &>/dev/null; then
+        die "realpath command not found. Please install it and ensure it's in your PATH." $EX_DEP_ISSUE
+    fi
+
+    if (( BASH_VERSINFO[0] < 4 || ( BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3 ) )); then
+        die "Bash version 4.3 or higher is required. Current version is ${BASH_VERSION}." $EX_DEP_ISSUE
+    fi
+}
+
 validate_arguments() {
-    if [[ -z "$_arg_source_directory" || -z "$_arg_output_directory" ]]; then
-        die "Both source and output directories must be specified." 2
+    if [[ -z "$_arg_source_directory" ]]; then
+        die "Both source and output directories must be specified." $EX_NO_INPUT
     fi
 
     if [[ ! -d "$_arg_source_directory" ]]; then
-        die "Source directory '$_arg_source_directory' does not exist or is not a directory." 2
+        die "Source directory '$_arg_source_directory' does not exist or is not a directory." $EX_NO_INPUT
+    fi
+
+    if [[ -z "$_arg_output_directory" ]]; then
+        die "Both source and output directories must be specified." $EX_NO_OUTPUT
     fi
 
     if [[ ! -d "$_arg_output_directory" ]]; then
-        mkdir -p -- "$_arg_output_directory" || die "Output directory '$_arg_output_directory' does not exist and cannot be created." 2
+        if ! mkdir -p -- "$_arg_output_directory"; then
+            die "Output directory '$_arg_output_directory' does not exist and cannot be created." $EX_NO_OUTPUT
+        fi
     fi
 
     # Internal checks
     case "$_arg_clean" in
         on | off) ;;
-        *) die "Internal error: Invalid value for --clean: '$_arg_clean'. Allowed values are 'on' or 'off'." 1 ;;
+        *) die "Internal error: Invalid value for --clean: '$_arg_clean'. Allowed values are 'on' or 'off'." $EX_INTERNAL ;;
     esac
 
     case "$_arg_yes" in
         on | off) ;;
-        *) die "Internal error: Invalid value for --yes: '$_arg_yes'. Allowed values are 'on' or 'off'." 1 ;;
+        *) die "Internal error: Invalid value for --yes: '$_arg_yes'. Allowed values are 'on' or 'off'." $EX_INTERNAL ;;
     esac
 }
 
 resolve_directories() {
-    _src="$(realpath "$_arg_source_directory")" || die "Cannot resolve source." 2
-    _out="$(realpath "$_arg_output_directory")" || die "Cannot resolve output." 2
+    if ! _src="$(realpath "$_arg_source_directory")"; then 
+        die "Cannot resolve source." $EX_NO_INPUT; 
+    fi
+
+    if ! _out="$(realpath "$_arg_output_directory")"; then 
+        die "Cannot resolve output." $EX_NO_OUTPUT; 
+    fi
 }
 
-# -- publish site --
 clean_output_directory() {
     if ! is_on "$_arg_clean"; then
         return 0
@@ -158,37 +211,37 @@ clean_output_directory() {
     # Security check to prevent accidental deletion of important directories
     case "$_out" in
         /|""|"."|".."|"/root"|"/home"|"/usr"|"/etc"|"/var"|"$_home"|"$_home/."|"$_home/..")
-        die "Refusing to clean output directory '$_out' for safety reasons." 3
+        die "Refusing to clean output directory '$_out' for safety reasons." $EX_CLEANING_ERROR
         ;;
     esac
     if mountpoint -q "$_out"; then
-        die "Refusing to clean output directory '$_out' because it is a mount point." 3
+        die "Refusing to clean output directory '$_out' because it is a mount point." $EX_CLEANING_ERROR
     fi
 
     # Check if the output directory is the same as the source directory
     if [[ "$_out" == "$_src" ]]; then
-        die "Output directory '$_out' cannot be the same as the source directory '$_src'." 3
+        die "Output directory '$_out' cannot be the same as the source directory '$_src'." $EX_CLEANING_ERROR
     fi
 
     # Check if the output directory is a parent of the source directory
     if [[ "$_src" == "$_out"/* ]]; then
-        die "Output directory '$_out' cannot be a parent of the source directory '$_src'." 3
+        die "Output directory '$_out' cannot be a parent of the source directory '$_src'." $EX_CLEANING_ERROR
     fi
     if [[ "$_out" == "$_src"/* ]]; then
-        die "Output directory '$_out' cannot be a subdirectory of the source directory '$_src'." 3
+        die "Output directory '$_out' cannot be a subdirectory of the source directory '$_src'." $EX_CLEANING_ERROR
     fi
 
     if [[ -d "$_out" ]]; then
         if [[ ! -w "$_out" ]]; then
-            die "Output directory '$_out' is not writable." 3
+            die "Output directory '$_out' is not writable." $EX_CLEANING_ERROR
         fi
 
         # Ask for confirmation
         if [[ "$_arg_yes" != "on" ]]; then
-            if [[ ! -t 0 ]]; then die "Non-interactive shell: pass --yes to clean." 3; fi
+            if [[ ! -t 0 ]]; then die "Non-interactive shell: pass --yes to clean." $EX_CLEANING_ERROR; fi
             read -r -p "Are you sure you want to clean '$_out' before publishing? [y/N] " _reply
             if [[ ! "$_reply" =~ ^[Yy]$ ]]; then
-                die "Aborted by user." 3
+                die "Aborted by user." $EX_CLEANING_ERROR
             fi
         fi
 
@@ -197,7 +250,7 @@ clean_output_directory() {
         # shellcheck disable=SC2115 # (safe because of previous checks)
         rm -rf -- "$_out"/* "$_out"/.[!.]* "$_out"/..?* 2>/dev/null || true
     else
-        mkdir -p -- "$_out" || die "Failed to create output directory '$_out'." 3
+        mkdir -p -- "$_out" || die "Failed to create output directory '$_out'." $EX_CLEANING_ERROR
     fi
 }
 
@@ -208,7 +261,7 @@ clean_output_directory() {
 # Note: this assumes file paths are either source-relative or absolute, empty paths are ignored, duplicates are removed
 # Exits with error if a file is outside the source directory
 get_clean_relative_path_list() {
-    local -n _relative_files_ref="${1:?Internal error: Missing argument to get_clean_relative_path_list()}"
+    local -n _relative_files_ref="${1:?Internal error: Missing argument to get_clean_relative_path_list}"
     shift
     local _fail_on_invalid="${1:-off}"
     shift
@@ -228,9 +281,9 @@ get_clean_relative_path_list() {
 
         if [[ "$_file" != "$_src/"* ]]; then
             if is_on "${_FAIL_ON_INVALID:-off}"; then
-                die "Found invalid file path '$_file' (outside source directory)." 4
+                die "Found invalid file path '$_file' (outside source directory)." $EX_INV_FILE
             fi
-            log_warn "Skipping file '$_file' outside source directory."
+            warn "Skipping file '$_file' outside source directory."
             continue # skip files outside source directory
         fi
         _relative="${_file#"$_src"/}" # make relative to source
@@ -248,11 +301,11 @@ get_clean_relative_path_list() {
 # Arguments: array to fill with file paths (relative to source directory)
 # Exits with error if a file is outside the source directory
 get_files_and_images_to_copy() {
-    local -n _files_to_copy_ref="${1?Internal error: Missing argument to get_files_and_images_to_copy()}"
+    local -n _files_to_copy_ref="${1?Internal error: Missing argument to get_files_and_images_to_copy}"
 
     local -a _files_to_publish=()
-    if ! readarray -d '' -t _files_to_publish < <(get-files-to-publish --print0 --only-published --missing-alias "warn" "$_src"); then
-        die "Failed to get files to publish." 4
+    if ! readarray -d '' -t _files_to_publish < <(get-files-to-publish --print0 --alias-mode "warn" "$_src"); then
+        die "Failed to get files to publish." $EX_COPY_ERROR
     fi
 
     if [[ "${#_files_to_publish[@]}" -eq 0 ]]; then
@@ -265,7 +318,7 @@ get_files_and_images_to_copy() {
     for _file in "${_files_to_publish[@]}"; do
         local -a _imgs=()
         if ! readarray -d '' -t _imgs < <(extract-links --images --print0 "$_file"); then
-            die "Failed to extract image links from file '$_file'." 4
+            die "Failed to extract image links from file '$_file'." $EX_COPY_ERROR
         fi
         if [[ "${#_imgs[@]}" -gt 0 ]]; then
             _images_to_publish+=("${_imgs[@]}")
@@ -296,7 +349,7 @@ check_dead_links() {
         local _link _target_src
         for _link in "${_internal_links[@]}"; do
             if [[ -z "${_file_set["$_link"]+_}" ]]; then
-                log_warn "Internal link '$_link' in file '$_file' does not point to a published file."
+                warn "Internal link '$_link' in file '$_file' does not point to a published file."
             fi
         done
     done
@@ -307,7 +360,7 @@ copy_files() {
 
     # Build NUL-separated list file for rsync
     local _list_file
-    _list_file=$(mktemp) || die "Failed to create temporary file." 4
+    _list_file=$(mktemp) || die "Failed to create temporary file." $EX_COPY_ERROR
     trap 'rm -f -- '"$_list_file" EXIT
 
     {
@@ -316,7 +369,7 @@ copy_files() {
 
     log "Copying ${#_relative_files[@]} files to '$_out' with rsync..."
     if ! rsync -a --files-from="$_list_file" --from0 "$_src"/ "$_out"/; then
-        die "Failed to copy files to '$_out'." 4
+        die "Failed to copy files to '$_out'." $EX_COPY_ERROR
     fi
 }
 

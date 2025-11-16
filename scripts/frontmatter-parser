@@ -3,10 +3,10 @@ set -eEuo pipefail
 
 # Error codes
 EX_USAGE=101          # CLI misuse / invalid flags
-EX_NOINPUT=102        # File not found
+EX_NO_INPUT=102       # File not found
 EX_UNAVAILABLE=103    # Dependency missing / unusable
-EX_NODATA=104         # No/empty/invalid front-matter
-EX_NORESULT=105       # Parameter not found / empty (soft by default)
+EX_NO_DATA=104        # No/empty/invalid front-matter
+EX_NO_RESULT=105      # Parameter not found / empty (soft by default)
 EX_UNSUPPORTED=106    # Unsupported type (e.g., map)
 EX_INTERNAL=198       # Internal error
 EX_UNKNOWN=199        # Unexpected error
@@ -36,10 +36,10 @@ die() {
     local _err_tag=""
     case "$_ret" in
         "$EX_USAGE") _err_tag="[E.USAGE]" ;;
-        "$EX_NOINPUT") _err_tag="[E.NO_INPUT]" ;;
+        "$EX_NO_INPUT") _err_tag="[E.NO_INPUT]" ;;
         "$EX_UNAVAILABLE") _err_tag="[E.UNAVAILABLE]" ;;
-        "$EX_NODATA") _err_tag="[E.NO_DATA]" ;;
-        "$EX_NORESULT") _err_tag="[E.NO_RESULT]" ;;
+        "$EX_NO_DATA") _err_tag="[E.NO_DATA]" ;;
+        "$EX_NO_RESULT") _err_tag="[E.NO_RESULT]" ;;
         "$EX_UNSUPPORTED") _err_tag="[E.UNSUPPORTED]" ;;
         "$EX_INTERNAL") _err_tag="[E.INTERNAL]" ;;
         "$EX_UNKNOWN") _err_tag="[E.UNKNOWN]" ;;
@@ -83,10 +83,10 @@ Dependencies:
 
 Error Codes:
     ${EX_USAGE}         Command line usage error (invalid flags, missing arguments)
-    ${EX_NOINPUT}       Input file not found
+    ${EX_NO_INPUT}       Input file not found
     ${EX_UNAVAILABLE}   Dependency missing or unusable (e.g., yq not installed)
-    ${EX_NODATA}        No/empty/invalid front-matter
-    ${EX_NORESULT}      Parameter not found or empty (soft by default)
+    ${EX_NO_DATA}        No/empty/invalid front-matter
+    ${EX_NO_RESULT}      Parameter not found or empty (soft by default)
     ${EX_UNSUPPORTED}   Unsupported type (e.g., map)
     ${EX_INTERNAL}      Internal error
     ${EX_UNKNOWN}       Unexpected error
@@ -199,7 +199,7 @@ validate_arguments() {
         _PRINT_USAGE="on" die "No input file specified." $EX_USAGE
     fi
     if [[ ! -f "$_arg_file_path" ]]; then
-        die "File '$_arg_file_path' not found." $EX_NOINPUT
+        die "File '$_arg_file_path' not found." $EX_NO_INPUT
     fi
 
     case "$_arg_verbose" in
@@ -345,7 +345,7 @@ main() {
         case $_err in
             0) ;; # No error
             "$EX_INVALID_FRONTMATTER")
-                is_on "$_arg_strict" && die "No valid YAML frontmatter found at the top of $_arg_file_path" $EX_NODATA
+                is_on "$_arg_strict" && die "No valid YAML frontmatter found at the top of $_arg_file_path" $EX_NO_DATA
                 warn "No valid YAML frontmatter found at the top of $_arg_file_path"
                 return 0
                 ;;
@@ -356,7 +356,7 @@ main() {
     fi
 
     if [[ -z "$_frontmatter" ]]; then
-        is_on "$_arg_strict" && die "No frontmatter found in '$_arg_file_path'." $EX_NODATA
+        is_on "$_arg_strict" && die "No frontmatter found in '$_arg_file_path'." $EX_NO_DATA
         warn "No frontmatter found in '$_arg_file_path'."
         return 0
     fi
@@ -371,7 +371,7 @@ main() {
             local -a _keys
             readarray -d '' -t _keys < <(echo "$_frontmatter" | yq --unwrapScalar --nul-output "keys | .[]")
             if [[ ${#_keys[@]} -eq 0 ]]; then
-                is_on "$_arg_strict" && die "No parameters found in frontmatter." $EX_NODATA
+                is_on "$_arg_strict" && die "No parameters found in frontmatter." $EX_NO_DATA
                 warn "No parameters found in frontmatter."
                 printf ''
             else
@@ -392,7 +392,7 @@ main() {
                 case $_err in
                     0) ;; # No error
                     "$EX_PARAM_NOT_FOUND")
-                        is_on "$_arg_strict" && die "Parameter '$_param' not found in '$_arg_file_path' frontmatter." $EX_NORESULT
+                        is_on "$_arg_strict" && die "Parameter '$_param' not found in '$_arg_file_path' frontmatter." $EX_NO_RESULT
                         warn "Parameter '$_param' not found in '$_arg_file_path' frontmatter."
                         continue
                         ;;
@@ -402,7 +402,7 @@ main() {
                         continue
                         ;;
                     "$EX_PARAM_EMPTY_ARRAY")
-                        is_on "$_arg_strict" && die "Parameter '$_param' in '$_arg_file_path' frontmatter is an empty array." $EX_NORESULT
+                        is_on "$_arg_strict" && die "Parameter '$_param' in '$_arg_file_path' frontmatter is an empty array." $EX_NO_RESULT
                         warn "Parameter '$_param' in '$_arg_file_path' frontmatter is an empty array."
                         continue
                         ;;
@@ -413,7 +413,7 @@ main() {
             fi
 
             if [[ ${#_param_return_array[@]} -eq 0 ]]; then
-                is_on "$_arg_strict" && die "Parameter '$_param' not found in '$_arg_file_path' frontmatter." $EX_NORESULT
+                is_on "$_arg_strict" && die "Parameter '$_param' not found in '$_arg_file_path' frontmatter." $EX_NO_RESULT
                 warn "Failed to get parameter '$_param' in '$_arg_file_path' frontmatter."
                 continue
             fi

@@ -3,8 +3,8 @@ set -eEuo pipefail
 
 # Error codes
 EX_USAGE=101          # CLI misuse / invalid flags
-EX_NOINPUT=102        # Directory not found
-EX_UNAVAILABLE=103    # Dependency missing / unusable
+EX_NO_INPUT=102       # Directory not found
+EX_DEP_ISSUE=103      # Dependency missing / unusable
 EX_FRONTMATTER=104    # No/empty/invalid front-matter
 EX_NODATA=105         # No markdown files found
 EX_INTERNAL=198       # Internal error
@@ -28,8 +28,8 @@ die() {
     local _err_tag=""
     case "$_ret" in
         "$EX_USAGE") _err_tag="[USAGE]" ;;
-        "$EX_NOINPUT") _err_tag="[NO_INPUT]" ;;
-        "$EX_UNAVAILABLE") _err_tag="[UNAVAILABLE]" ;;
+        "$EX_NO_INPUT") _err_tag="[NO_INPUT]" ;;
+        "$EX_DEP_ISSUE") _err_tag="[DEP_ISSUE]" ;;
         "$EX_FRONTMATTER") _err_tag="[FRONTMATTER]" ;;
         "$EX_NODATA") _err_tag="[NO_DATA]" ;;
         "$EX_INTERNAL") _err_tag="[INTERNAL]" ;;
@@ -71,8 +71,8 @@ Dependencies:
 
 Error codes:
     ${EX_USAGE}         Command line usage error (invalid flags, missing arguments)
-    ${EX_NOINPUT}       Input file not found
-    ${EX_UNAVAILABLE}   Dependency missing or unusable (e.g., is-file-publishable not installed)
+    ${EX_NO_INPUT}      Input file not found
+    ${EX_DEP_ISSUE}     Dependency missing or unusable (e.g., is-file-publishable not installed)
     ${EX_FRONTMATTER}   No/empty/invalid front-matter
     ${EX_NODATA}        No markdown files found
     ${EX_INTERNAL}      Internal error
@@ -151,6 +151,7 @@ parse_commandline() {
             _PRINT_USAGE="on" die "Unknown option '$1'." $EX_USAGE
             ;;
         *)
+            # Positional argument
             _positionals+=("$1")
             shift
             ;;
@@ -170,27 +171,29 @@ parse_commandline() {
 
 check_dependencies() {
     if ! command -v is-file-publishable &>/dev/null; then
-        die "Error: Could not find is-file-publishable in PATH." $EX_UNAVAILABLE
+        die "Error: Could not find is-file-publishable in PATH." $EX_DEP_ISSUE
     fi
     if ! command -v realpath &>/dev/null; then
-        die "Error: Could not find realpath in PATH." $EX_UNAVAILABLE
+        die "Error: Could not find realpath in PATH." $EX_DEP_ISSUE
     fi
     if ! command -v fd &>/dev/null; then
-        die "Error: Could not find fd in PATH." $EX_UNAVAILABLE
+        die "Error: Could not find fd in PATH." $EX_DEP_ISSUE
     fi
     if ! command -v sed &>/dev/null; then
-        die "Error: Could not find sed in PATH." $EX_UNAVAILABLE
+        die "Error: Could not find sed in PATH." $EX_DEP_ISSUE
     fi
 
     if (( BASH_VERSINFO[0] < 4 || ( BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3 ) )); then
-        die "Bash version 4.3 or higher is required. Current version is ${BASH_VERSION}." $EX_UNAVAILABLE
+        die "Bash version 4.3 or higher is required. Current version is ${BASH_VERSION}." $EX_DEP_ISSUE
     fi
 }
 
 validate_arguments() {
-    [[ -z "$_arg_directory" ]] && die "Error: No source directory specified." $EX_USAGE
+    if [[ -z "$_arg_directory" ]]; then 
+        die "Error: No source directory specified." $EX_USAGE
+    fi
     if [[ ! -d "$_arg_directory" ]]; then
-        die "Source directory '$_arg_directory' does not exist." $EX_NOINPUT
+        die "Source directory '$_arg_directory' does not exist." $EX_NO_INPUT
     fi
     _arg_directory="${_arg_directory%/}/" # Normalize directory path to always end with a slash for alias matching
 
