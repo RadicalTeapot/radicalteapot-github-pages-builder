@@ -7,12 +7,12 @@ Repository for my personal website, a clean and simple HTML / CSS website exampl
 Clone the repository then run any of the following commands:
 
 - `just publish`: Publish the website (copy files from vault, build the site, copy to publish folder)
-- `just copy-from-vault`: Copy markdown files from my Obsidian vault to the site content folder
+- `just copy-from-vault`: Copy markdown files from Obsidian vault to the site content folder
 - `just serve`: Serve the website using hugo server (locally, not published, using the site content folder)
 - `just build`: Build the website using hugo (locally, not published, using the site content folder)
 - `just clean`: Clean the site content folder and the publish folder
 
-Path to my Obsidian vault must be set using the `VAULT_PATH` environment variable or in a `.env` file.
+Path to Obsidian vault must be set using the `VAULT_PATH` environment variable or in a `.env` file.
 See the Environment variables section below for more details about configurable options.
 
 ## Testing
@@ -24,13 +24,14 @@ The following commands are available to run the tests:
 - `just test-interactive`: Run an interactive podman container for testing
 - `just test-extract-links`: Test the `extract-links` command
 - `just test-frontmatter-parser`: Test the `frontmatter-parser` command
+- `just test-is-file-publishable`: Test the `is-file-publishable` command
 - `just test-get-files-to-publish`: Test the `get-files-to-publish` command
 - `just test-publish-site`: Test the `publish-site` command
 - `just test-validate-markdown-content`: Test the `validate-markdown-content` command
 
 ## Environment variables
 
-- `VAULT_PATH`: Absolute path to the root of my Obsidian vault (no default, must be set by user either using an environment variable or in a `.env` file)
+- `VAULT_PATH`: Absolute path to the root of my Obsidian vault (**no default, must be set by user** either using an environment variable or in a `.env` file)
 - `PODMAN_BASE_IMAGE_NAME`: Tag of the podman image to create for base operations (default: `website-builder`)
 - `PODMAN_TESTING_IMAGE_NAME`: Tag of the podman image to create for testing operations (default: `website-builder-testing`)
 - `PODMAN_HUGO_BUILD_IMAGE_NAME`: Tag of the podman image to create for hugo build operations (default: `website-builder-hugo-build`)
@@ -46,7 +47,9 @@ The following commands are available to run the tests:
 
 - [ ] Fix printing when `just copy-from-vault` is run
 - [ ] Rethink vault structure to fix issue with list pages
+- [x] Speed up `get-files-to-publish`
 - [ ] Speed up `publish-site`
+- [ ] Refactor `extract-links` and `validate-markdown-content` command to follow repo guidelines
 - [ ] Auto-push published code to github pages
 - [ ] Adapt `validate-markdown-content` so it can be used to lint files in neovim
 - [ ] Auto publish on save in neovim
