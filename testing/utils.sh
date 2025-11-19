@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 # Minimalist testing utilities for bash scripts, should be *sourced* not executed.
 
 # ---- colors support with fallbacks

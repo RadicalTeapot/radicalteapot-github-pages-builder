@@ -7,9 +7,9 @@ Repository for my personal website, a clean and simple HTML / CSS website exampl
 Clone the repository then run any of the following commands:
 
 - `just publish`: Publish the website (copy files from vault, build the site, copy to publish folder)
-- `just copy-from-vault`: Copy markdown files from Obsidian vault to the site content folder
-- `just serve`: Serve the website using hugo server (locally, not published, using the site content folder)
-- `just build`: Build the website using hugo (locally, not published, using the site content folder)
+- `just copy-publishable-files`: Copy publishable markdown files from Obsidian vault to the site content folder
+- `just serve-site`: Serve the website using hugo server (locally, not published, using the site content folder)
+- `just build-site`: Build the website using hugo (locally, not published, using the site content folder)
 - `just clean`: Clean the site content folder and the publish folder
 
 Path to Obsidian vault must be set using the `VAULT_PATH` environment variable or in a `.env` file.
@@ -45,7 +45,7 @@ The following commands are available to run the tests:
 
 ## To do
 
-- [ ] Fix printing when `just copy-from-vault` is run
+- [ ] Fix printing when `just copy-publishable-files` is run
 - [ ] Rethink vault structure to fix issue with list pages
 - [x] Speed up `get-files-to-publish`
 - [ ] Speed up `publish-site`

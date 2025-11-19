@@ -31,7 +31,7 @@ interactive: _build-base-image
         --volume "{{site_content}}:/publish:Z" \
         {{image-name-base}}
 
-copy-from-vault: _build-base-image
+copy-publishable-files: _build-base-image
     mkdir -p "{{site_content}}"
     echo "Copying from vault {{vault}} to site content {{site_content}}"
     podman run \
@@ -41,7 +41,7 @@ copy-from-vault: _build-base-image
         {{image-name-base}} \
         publish-site /vault /publish
 
-serve: _build-server-image _copy_site_markdown_files
+serve-site: _build-server-image _copy_site_markdown_files
     podman run \
         --interactive --tty --rm \
         --publish {{hugo_port}}:{{hugo_port}} \
@@ -49,7 +49,7 @@ serve: _build-server-image _copy_site_markdown_files
         {{image-name-server}} \
         hugo server --bind=0.0.0.0 --poll 750ms
 
-build: _build-builder-image _copy_site_markdown_files
+build-site: _build-builder-image _copy_site_markdown_files
     podman run \
         --rm \
         --env=BASE_URL={{base_url}} \
@@ -58,7 +58,11 @@ build: _build-builder-image _copy_site_markdown_files
     mkdir -p "{{publish_dir}}"
     cp "{{site_root}}/public/*" "{{publish_dir}}"
 
-# publish: copy-from-vault build-site push-to-github
+push-to-github:
+    # Do nothing for now, will be implemented later
+    echo "Pushing to GitHub (not implemented yet)"
+
+publish: copy-publishable-files build-site push-to-github
 
 clean:
     # TODO Clean podman images

@@ -13,6 +13,8 @@ RUN chmod +x /usr/local/bin/extract-links \
     && chmod +x /usr/local/bin/validate-markdown-content \
     && chmod +x /usr/local/bin/publish-site
 
+COPY utils/ /utils
+
 FROM base as testing
 
 # Needed for tput (used in test scripts)

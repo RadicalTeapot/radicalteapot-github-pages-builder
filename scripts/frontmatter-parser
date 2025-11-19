@@ -18,15 +18,16 @@ EX_PARAM_EMPTY_ARRAY=3
 EX_INVALID_FRONTMATTER=4
 
 #Usage string
-USAGE="Usage: frontmatter-parser.sh [-p|--parameter <name>]... [-0|--print0] [--value-only] [-h|--help] [-v|--verbose <level>] [-q|--quiet] [--strict] [--] <file>"
+COMMAND_NAME="$(basename "$0")"
+USAGE="Usage: $COMMAND_NAME [-p|--parameter <name>]... [-0|--print0] [--value-only] [-h|--help] [-v|--verbose <level>] [-q|--quiet] [--strict] [--] <file>"
 
 # Helpers
 _verbose_level=1
 
-debug() { if (( _verbose_level >= 3 )); then printf '[DEBUG] %s\n' "$*" >&2; fi; }
-log()   { if (( _verbose_level >= 2 )); then printf '%s\n' "$*" >&2; fi; }
-warn()  { if (( _verbose_level >= 1 )); then printf '[WARN] %s\n' "$*" >&2; fi; }
-error() { printf '[ERROR] %s\n' "$@" >&2; }
+debug() { if (( _verbose_level >= 3 )); then printf '[DEBUG] [%s] %s\n' "$COMMAND_NAME" "$*" >&2; fi; }
+log()   { if (( _verbose_level >= 2 )); then printf '[INFO] [%s] %s\n' "$COMMAND_NAME" "$*" >&2; fi; }
+warn()  { if (( _verbose_level >= 1 )); then printf '[WARN] [%s] %s\n' "$COMMAND_NAME" "$*" >&2; fi; }
+error() { printf '[ERROR] [%s] %s\n' "$COMMAND_NAME" "$*" >&2; }
 is_on() { [[ "$1" == "on" ]]; }
 
 die() {

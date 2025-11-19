@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+# shellcheck source=utils/log_utils.sh
+source "/utils/log_utils.sh"
+
 # Error codes
 EX_USAGE=101          # CLI misuse / invalid flags
 EX_NO_INPUT=102       # Directory not found
@@ -11,15 +14,8 @@ EX_INTERNAL=198       # Internal error
 EX_UNKNOWN=199        # Unexpected error
 
 # Usage string
-USAGE="Usage: get-files-to-publish [--ignore-publish-state] [--alias-mode <arg>] [-0|--print0] [-h|--help] [-v|--verbose-level <level>] [--quiet] [-vv|--very-verbose] <directory>"
-
-_verbose_level=1
-
-debug() { if (( _verbose_level >= 3 )); then printf '[DEBUG] %s\n' "$*" >&2; fi; }
-log()   { if (( _verbose_level >= 2 )); then printf '%s\n' "$*" >&2; fi; }
-warn()  { if (( _verbose_level >= 1 )); then printf '[WARN] %s\n' "$*" >&2; fi; }
-error() { printf '[ERROR] %s\n' "$*" >&2; }
-is_on() { [[ "$1" == "on" ]]; }
+COMMAND_NAME="$(basename "$0")"
+USAGE="Usage: $COMMAND_NAME [--ignore-publish-state] [--alias-mode <arg>] [-0|--print0] [-h|--help] [-v|--verbose-level <level>] [--quiet] [-vv|--very-verbose] <directory>"
 
 die() {
     local -r _message="${1:-"Unknown error"}"
@@ -204,22 +200,14 @@ validate_arguments() {
         ;;
     esac
 
-    case "$_arg_verbose" in
-        0 | quiet) 
-            if [[ ${_arg_missing_alias} == "warn" ]]; then
-                _verbose_level=1
-                warn "Warning: --alias-mode 'warn' is set but verbosity level is 'quiet'. Warnings will not be shown. Setting verbosity level to 'normal'."
-            else
-                _verbose_level=0
-            fi 
-            ;;
-        1 | normal) _verbose_level=1 ;;
-        2 | debug) _verbose_level=2 ;;
-        3 | verbose) _verbose_level=3 ;;
-        *)
-            _PRINT_USAGE="on" die "Invalid value for --verbose: '$_arg_verbose'. Must be one of: 0 or 'quiet', 1 or 'normal', 2 or 'debug', 3 or 'verbose'." $EX_USAGE
-            ;;
-    esac
+    if ! set_verbosity "$_arg_verbose"; then
+        _PRINT_USAGE="on" die "Failed to set verbosity level to '$_arg_verbose'." $EX_USAGE
+    fi
+
+    if [[ ${_arg_missing_alias} == "warn" && $(get_verbosity) == "quiet" ]]; then
+        set_verbosity "normal"
+        warn "Warning: --alias-mode 'warn' is set but verbosity level is 'quiet'. Warnings will not be shown. Setting verbosity level to 'normal'."
+    fi
 
     # Internal errors
     case "$_arg_ignore_publish_state" in
@@ -230,10 +218,6 @@ validate_arguments() {
         on | off) ;;
         *) die "Internal error: Invalid value for --print0: '$_arg_print0'. Allowed values are 'on' or 'off'." $EX_INTERNAL ;;
     esac
-
-    if [[ ${_arg_missing_alias} == "warn" && ${_verbose_level} -eq 0 ]]; then
-        die "Warning mode with incompatible verbosity level 'quiet'." $EX_INTERNAL
-    fi
 }
 
 main() {
@@ -248,7 +232,8 @@ main() {
     local _ext
     for _ext in "${_markdown_extensions[@]}"; do
         local -a _tmp_arr=()
-        readarray -d '' -t _tmp_arr < <(fd --full-path "$_arg_directory" -e "$_ext" --print0)
+        # As per documentation, fd . "path" lists all files under "path" ('.' is the search pattern matching all files)
+        readarray -d '' -t _tmp_arr < <(fd . "$_arg_directory" --extension "$_ext" --type file --print0 --color=never)
         _md_files+=("${_tmp_arr[@]}")
     done
 

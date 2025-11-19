@@ -47,7 +47,7 @@ test_empty_file_no_options() {
     touch "$_path"
 
     local _result
-    _result="$("$_command" "$_test_dir" 2>/dev/null)"
+    _result="$("$_command" "$_test_dir")"
 
     if ! assert_success $? "Expected success when pointing to an empty file"; then
         return 1

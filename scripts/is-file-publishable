@@ -10,14 +10,16 @@ EX_INTERNAL=198       # Internal error
 EX_UNKNOWN=199        # Unexpected error
 
 # Usage string
-USAGE="Usage: is-file-publishable [--ignore-publish-state] [--alias-mode <arg>] [-h|--help] [-v|--verbose-level <level>] [--quiet] [-vv|--very-verbose] [--] <file>"
+COMMAND_NAME="$(basename "$0")"
+
+USAGE="Usage: $COMMAND_NAME [--ignore-publish-state] [--alias-mode <arg>] [-h|--help] [-v|--verbose-level <level>] [--quiet] [-vv|--very-verbose] [--] <file>"
 
 _verbose_level=1
 
-debug() { if (( _verbose_level >= 3 )); then printf '[DEBUG] %s\n' "$*" >&2; fi; }
-log()   { if (( _verbose_level >= 2 )); then printf '%s\n' "$*" >&2; fi; }
-warn()  { if (( _verbose_level >= 1 )); then printf '[WARN] %s\n' "$*" >&2; fi; }
-error() { printf '[ERROR] %s\n' "$*" >&2; }
+debug() { if (( _verbose_level >= 3 )); then printf '[DEBUG] [%s] %s\n' "$COMMAND_NAME" "$*" >&2; fi; }
+log()   { if (( _verbose_level >= 2 )); then printf '[INFO] [%s] %s\n' "$COMMAND_NAME" "$*" >&2; fi; }
+warn()  { if (( _verbose_level >= 1 )); then printf '[WARN] [%s] %s\n' "$COMMAND_NAME" "$*" >&2; fi; }
+error() { printf '[ERROR] [%s] %s\n' "$COMMAND_NAME" "$*" >&2; }
 is_on() { [[ "$1" == "on" ]]; }
 
 die() {
